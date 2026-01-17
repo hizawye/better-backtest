@@ -1,4 +1,4 @@
-import type { Position, Trade } from '../../../../shared/types';
+import type { Position, Trade } from '$shared/types';
 
 export function calculateUnrealizedPnL(
   position: Position,

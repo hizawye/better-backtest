@@ -1,17 +1,17 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { useTradingStore } from '../lib/stores/trading';
-  import { positionManager } from '../lib/engine/positions';
-  import { getBars, saveBars } from '../lib/db/ticks';
-  import { PAIR_SPREADS } from '../../../shared/types';
-  import Chart from '../lib/components/Chart.svelte';
-  import OrderPanel from '../lib/components/OrderPanel.svelte';
-  import PositionTable from '../lib/components/PositionTable.svelte';
-  import TradeHistory from '../lib/components/TradeHistory.svelte';
-  import ReplayControls from '../lib/components/ReplayControls.svelte';
+  import { useTradingStore } from '$lib/stores/trading';
+  import { positionManager } from '$lib/engine/positions';
+  import { getBars, saveBars } from '$lib/db/ticks';
+  import { PAIR_SPREADS } from '$shared/types';
+  import Chart from '$lib/components/Chart.svelte';
+  import OrderPanel from '$lib/components/OrderPanel.svelte';
+  import PositionTable from '$lib/components/PositionTable.svelte';
+  import TradeHistory from '$lib/components/TradeHistory.svelte';
+  import ReplayControls from '$lib/components/ReplayControls.svelte';
   import '../app.css';
 
-  const store = useTradingStore();
+  let store = useTradingStore();
 
   let worker: Worker | null = null;
   let isLoading = false;
@@ -75,7 +75,7 @@
 
   function initWorker() {
     worker = new Worker(
-      new URL('../lib/workers/tick-replay.worker.ts', import.meta.url),
+      new URL('$lib/workers/tick-replay.worker.ts', import.meta.url),
       { type: 'module' }
     );
 

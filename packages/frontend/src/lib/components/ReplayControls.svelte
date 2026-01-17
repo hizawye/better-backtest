@@ -1,8 +1,8 @@
 <script lang="ts">
   import { useTradingStore } from '../stores/trading';
-  import type { ForexPair } from '../../../../shared/types';
+  import type { ForexPair } from '$shared/types';
 
-  const store = useTradingStore();
+  let store = useTradingStore();
 
   export let onPlayPause: () => void;
   export let onSpeedChange: (speed: number) => void;

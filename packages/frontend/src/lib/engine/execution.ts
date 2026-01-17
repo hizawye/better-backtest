@@ -1,4 +1,4 @@
-import type { Order, Position, Trade } from '../../../../shared/types';
+import type { Order, Position, Trade } from '$shared/types';
 
 export function executeMarketOrder(
   side: 'buy' | 'sell',

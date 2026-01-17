@@ -4,7 +4,7 @@
   import { closePosition } from '../engine/pnl';
   import { formatPnL, formatPips } from '../utils/forex';
 
-  const store = useTradingStore();
+  let store = useTradingStore();
 
   function handleClose(positionId: string) {
     const position = positionManager.get(positionId);

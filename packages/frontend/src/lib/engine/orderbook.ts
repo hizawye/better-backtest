@@ -1,4 +1,4 @@
-import type { Order } from '../../../../shared/types';
+import type { Order } from '$shared/types';
 
 export class OrderBook {
   private orders: Map<string, Order> = new Map();

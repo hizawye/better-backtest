@@ -1,4 +1,4 @@
-import type { Bar, Tick } from '../../../../shared/types';
+import type { Bar, Tick } from '$shared/types';
 
 let currentIndex = 0;
 let bars: Bar[] = [];

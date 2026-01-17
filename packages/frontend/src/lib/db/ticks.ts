@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Bar } from '../../../../shared/types';
+import type { Bar } from '$shared/types';
 
 interface BarRecord {
   id: string;

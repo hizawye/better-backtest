@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { createChart, type IChartApi, type ISeriesApi } from 'lightweight-charts';
-  import type { Bar } from '../../../../shared/types';
+  import type { Bar } from '$shared/types';
 
   export let bars: Bar[] = [];
   export let currentBar: Bar | null = null;

@@ -2,7 +2,7 @@
   import { useTradingStore } from '../stores/trading';
   import { formatPnL, formatPips } from '../utils/forex';
 
-  const store = useTradingStore();
+  let store = useTradingStore();
 
   $: winningTrades = $store.trades.filter(t => t.realizedPnL > 0);
   $: losingTrades = $store.trades.filter(t => t.realizedPnL < 0);

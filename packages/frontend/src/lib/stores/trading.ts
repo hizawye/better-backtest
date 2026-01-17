@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Bar, Tick, Position, Order, Trade, ForexPair } from '../../../../shared/types';
+import type { Bar, Tick, Position, Order, Trade, ForexPair } from '$shared/types';
 
 interface TradingState {
   // Market data

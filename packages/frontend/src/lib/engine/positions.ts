@@ -1,4 +1,4 @@
-import type { Position } from '../../../../shared/types';
+import type { Position } from '$shared/types';
 import { updatePositionPnL } from './pnl';
 
 export class PositionManager {

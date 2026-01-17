@@ -2,9 +2,9 @@
   import { useTradingStore } from '../stores/trading';
   import { executeMarketOrder } from '../engine/execution';
   import { positionManager } from '../engine/positions';
-  import { PAIR_SPREADS } from '../../../../shared/types';
+  import { PAIR_SPREADS } from '$shared/types';
 
-  const store = useTradingStore();
+  let store = useTradingStore();
 
   let lotSize = 0.1;
   let orderType: 'market' | 'limit' | 'stop' = 'market';
