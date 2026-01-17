@@ -1,0 +1,14 @@
+{
+  "name": "better-backtest",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "cd packages/backend && bun run dev",
+    "dev:frontend": "cd packages/frontend && npm run dev",
+    "build:backend": "cd packages/backend && bun run build",
+    "build:frontend": "cd packages/frontend && npm run build"
+  }
+}

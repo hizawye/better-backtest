@@ -1,0 +1,76 @@
+:root {
+  --bg-primary: #0a0e27;
+  --bg-secondary: #131722;
+  --bg-tertiary: #1e222d;
+  --text-primary: #d1d4dc;
+  --text-secondary: #787b86;
+  --border-color: #2a2e39;
+  --accent-color: #2962ff;
+  --success-color: #089981;
+  --danger-color: #f23645;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  background: transparent;
+}
+
+input, select {
+  font-family: inherit;
+  outline: none;
+}
+
+.app-container {
+  display: grid;
+  grid-template-rows: 60px 1fr 200px;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 1px;
+  background: var(--border-color);
+}
+
+.chart-area {
+  background: var(--bg-secondary);
+  position: relative;
+}
+
+.side-panel {
+  background: var(--bg-tertiary);
+  overflow-y: auto;
+}
+
+.bottom-panel {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  overflow-y: auto;
+}
