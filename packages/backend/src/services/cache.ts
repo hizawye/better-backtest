@@ -3,6 +3,7 @@ import { createClient } from 'redis';
 let redisClient: ReturnType<typeof createClient> | null = null;
 let redisAvailable = true;
 let connectionAttempted = false;
+let errorLogged = false;
 
 export async function getRedisClient() {
   if (!redisAvailable) {
@@ -18,13 +19,20 @@ export async function getRedisClient() {
       });
 
       redisClient.on('error', (err) => {
-        console.warn('Redis error (running without cache):', err.message);
+        // Only log the first error to avoid spam
+        if (!errorLogged) {
+          console.warn('Redis unavailable - running without cache:', err?.message || 'Connection failed');
+          errorLogged = true;
+        }
       });
 
       await redisClient.connect();
-      console.log('Redis connected successfully');
+      console.log('✓ Redis connected successfully');
     } catch (error) {
-      console.warn('Redis unavailable - running without cache:', (error as Error).message);
+      if (!errorLogged) {
+        console.warn('⚠ Redis unavailable - running without cache');
+        errorLogged = true;
+      }
       redisAvailable = false;
       redisClient = null;
       return null;

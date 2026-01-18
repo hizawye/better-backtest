@@ -14,8 +14,9 @@ app.get('/:pair/:from/:to', async (c) => {
       return c.json({ error: 'Invalid parameters' }, 400);
     }
 
-    if (!['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF'].includes(pair)) {
-      return c.json({ error: 'Unsupported currency pair' }, 400);
+    const validPairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'NAS100', 'US500'];
+    if (!validPairs.includes(pair)) {
+      return c.json({ error: `Unsupported instrument. Valid options: ${validPairs.join(', ')}` }, 400);
     }
 
     const bars = await fetchBars(pair, from, to);
