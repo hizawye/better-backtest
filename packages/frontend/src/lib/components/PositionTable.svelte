@@ -1,37 +1,39 @@
 <script lang="ts">
-  import { useTradingStore } from '../stores/trading';
+  import { tradingStore } from '../stores/trading';
   import { positionManager } from '../engine/positions';
   import { closePosition } from '../engine/pnl';
   import { formatPnL, formatPips } from '../utils/forex';
 
-  let store = useTradingStore();
+  $: positions = $tradingStore.positions;
+  $: currentTick = $tradingStore.currentTick;
+  $: currentPair = $tradingStore.currentPair;
 
   function handleClose(positionId: string) {
     const position = positionManager.get(positionId);
-    if (!position || !$store.currentTick) return;
+    if (!position || !currentTick) return;
 
     const trade = closePosition(
       position,
-      $store.currentTick.bid,
-      $store.currentTick.ask,
-      $store.currentTick.timestamp,
-      $store.currentPair
+      currentTick.bid,
+      currentTick.ask,
+      currentTick.timestamp,
+      currentPair
     );
 
     positionManager.remove(positionId);
-    store.removePosition(positionId);
-    store.addTrade(trade);
-    store.updateBalance(trade.realizedPnL);
+    tradingStore.removePosition(positionId);
+    tradingStore.addTrade(trade);
+    tradingStore.updateBalance(trade.realizedPnL);
   }
 </script>
 
 <div class="position-table">
   <div class="table-header">
-    <h3>Open Positions ({$store.positions.length})</h3>
+    <h3>Open Positions ({positions.length})</h3>
   </div>
 
   <div class="table-wrapper">
-    {#if $store.positions.length === 0}
+    {#if positions.length === 0}
       <div class="empty-state">
         <p>No open positions</p>
       </div>
@@ -49,7 +51,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each $store.positions as position}
+          {#each positions as position}
             {@const pips = position.currentPrice && position.entryPrice
               ? (position.side === 'buy'
                   ? (position.currentPrice - position.entryPrice)

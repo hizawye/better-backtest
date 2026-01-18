@@ -1,4 +1,5 @@
-import { create } from 'zustand';
+import { createStore } from 'zustand/vanilla';
+import { writable, derived, type Readable } from 'svelte/store';
 import type { Bar, Tick, Position, Order, Trade, ForexPair } from '$shared/types';
 
 interface TradingState {
@@ -47,7 +48,7 @@ interface TradingState {
   reset: () => void;
 }
 
-export const useTradingStore = create<TradingState>((set) => ({
+const store = createStore<TradingState>((set) => ({
   // Initial state
   currentPair: 'EURUSD',
   currentBar: null,
@@ -122,3 +123,22 @@ export const useTradingStore = create<TradingState>((set) => ({
       currentIndex: 0
     })
 }));
+
+// Convert Zustand store to Svelte store
+function zustandToSvelte<T>(zustandStore: any): Readable<T> & T {
+  const { subscribe } = writable(zustandStore.getState(), (set) => {
+    return zustandStore.subscribe(set);
+  });
+
+  return new Proxy(
+    { subscribe } as any,
+    {
+      get(target, prop) {
+        if (prop === 'subscribe') return target.subscribe;
+        return zustandStore.getState()[prop];
+      }
+    }
+  );
+}
+
+export const tradingStore = zustandToSvelte<TradingState>(store);

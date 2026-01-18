@@ -1,20 +1,19 @@
 <script lang="ts">
-  import { useTradingStore } from '../stores/trading';
+  import { tradingStore } from '../stores/trading';
   import { formatPnL, formatPips } from '../utils/forex';
 
-  let store = useTradingStore();
-
-  $: winningTrades = $store.trades.filter(t => t.realizedPnL > 0);
-  $: losingTrades = $store.trades.filter(t => t.realizedPnL < 0);
-  $: winRate = $store.trades.length > 0
-    ? ((winningTrades.length / $store.trades.length) * 100).toFixed(1)
+  $: trades = $tradingStore.trades;
+  $: winningTrades = trades.filter(t => t.realizedPnL > 0);
+  $: losingTrades = trades.filter(t => t.realizedPnL < 0);
+  $: winRate = trades.length > 0
+    ? ((winningTrades.length / trades.length) * 100).toFixed(1)
     : '0.0';
-  $: totalPnL = $store.trades.reduce((sum, t) => sum + t.realizedPnL, 0);
+  $: totalPnL = trades.reduce((sum, t) => sum + t.realizedPnL, 0);
 </script>
 
 <div class="trade-history">
   <div class="table-header">
-    <h3>Trade History ({$store.trades.length})</h3>
+    <h3>Trade History ({trades.length})</h3>
     <div class="stats">
       <span class="stat">Win Rate: <strong>{winRate}%</strong></span>
       <span class="stat">Total P&L: <strong class:positive={totalPnL > 0} class:negative={totalPnL < 0}>{formatPnL(totalPnL)}</strong></span>
@@ -22,7 +21,7 @@
   </div>
 
   <div class="table-wrapper">
-    {#if $store.trades.length === 0}
+    {#if trades.length === 0}
       <div class="empty-state">
         <p>No closed trades yet</p>
       </div>
@@ -40,7 +39,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each $store.trades.slice().reverse() as trade}
+          {#each trades.slice().reverse() as trade}
             <tr>
               <td>{new Date(trade.exitTime).toLocaleTimeString()}</td>
               <td>

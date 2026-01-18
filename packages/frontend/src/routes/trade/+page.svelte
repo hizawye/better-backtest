@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { useTradingStore } from '$lib/stores/trading';
+  import { tradingStore } from '$lib/stores/trading';
   import { positionManager } from '$lib/engine/positions';
   import { getBars, saveBars } from '$lib/db/ticks';
   import { PAIR_SPREADS } from '$shared/types';
@@ -11,7 +11,11 @@
   import ReplayControls from '$lib/components/ReplayControls.svelte';
   import '../../app.css';
 
-  let store = useTradingStore();
+  $: currentPair = $tradingStore.currentPair;
+  $: bars = $tradingStore.bars;
+  $: currentBar = $tradingStore.currentBar;
+  $: isPlaying = $tradingStore.isPlaying;
+  $: balance = $tradingStore.balance;
 
   let worker: Worker | null = null;
   let isLoading = false;
@@ -37,11 +41,11 @@
       const now = Date.now();
       const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-      let bars = await getBars($store.currentPair, weekAgo, now);
+      let bars = await getBars(currentPair, weekAgo, now);
 
       if (bars.length === 0) {
         // Fetch from API
-        const response = await fetch(`/api/data/${$store.currentPair}/${weekAgo}/${now}`);
+        const response = await fetch(`/api/data/${currentPair}/${weekAgo}/${now}`);
 
         if (!response.ok) {
           throw new Error(`API error: ${response.statusText}`);
@@ -51,17 +55,17 @@
         bars = data.bars;
 
         // Save to IndexedDB
-        await saveBars($store.currentPair, bars);
+        await saveBars(currentPair, bars);
       }
 
-      store.setBars(bars);
+      tradingStore.setBars(bars);
 
       if (worker) {
         worker.postMessage({
           type: 'init',
           payload: {
             bars,
-            spread: PAIR_SPREADS[$store.currentPair]
+            spread: PAIR_SPREADS[currentPair]
           }
         });
       }
@@ -83,20 +87,20 @@
       const { type, payload } = e.data;
 
       if (type === 'tick') {
-        store.setCurrentBar(payload.bar);
-        store.setCurrentTick(payload.tick);
-        store.setProgress(payload.index, payload.total);
+        tradingStore.setCurrentBar(payload.bar);
+        tradingStore.setCurrentTick(payload.tick);
+        tradingStore.setProgress(payload.index, payload.total);
 
         // Update positions
         positionManager.updatePrices(payload.tick.bid, payload.tick.ask);
         const positions = positionManager.getAll();
-        store.updatePositions(positions);
+        tradingStore.updatePositions(positions);
 
         // Update equity
         const unrealizedPnL = positionManager.getTotalUnrealizedPnL();
-        store.updateEquity($store.balance + unrealizedPnL);
+        tradingStore.updateEquity(balance + unrealizedPnL);
       } else if (type === 'complete') {
-        store.setPlaying(false);
+        tradingStore.setPlaying(false);
       }
     };
   }
@@ -104,25 +108,25 @@
   function handlePlayPause() {
     if (!worker) return;
 
-    if ($store.isPlaying) {
+    if (isPlaying) {
       worker.postMessage({ type: 'pause' });
-      store.setPlaying(false);
+      tradingStore.setPlaying(false);
     } else {
       worker.postMessage({ type: 'play' });
-      store.setPlaying(true);
+      tradingStore.setPlaying(true);
     }
   }
 
   function handleSpeedChange(speed: number) {
     if (!worker) return;
     worker.postMessage({ type: 'setSpeed', payload: { speed } });
-    store.setSpeed(speed);
+    tradingStore.setSpeed(speed);
   }
 
   function handleReset() {
     if (!worker) return;
     worker.postMessage({ type: 'reset' });
-    store.reset();
+    tradingStore.reset();
   }
 
   // Keyboard shortcuts
@@ -142,7 +146,7 @@
   <div class="header">
     <div class="logo">
       <h1>Better Backtest</h1>
-      <span class="pair-badge">{$store.currentPair}</span>
+      <span class="pair-badge">{currentPair}</span>
     </div>
     <ReplayControls
       onPlayPause={handlePlayPause}
@@ -164,7 +168,7 @@
           <button class="btn" on:click={loadData}>Retry</button>
         </div>
       {:else}
-        <Chart bars={$store.bars} currentBar={$store.currentBar} />
+        <Chart bars={bars} currentBar={currentBar} />
       {/if}
     </div>
 

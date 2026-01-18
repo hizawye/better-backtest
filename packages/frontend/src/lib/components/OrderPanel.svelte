@@ -1,10 +1,13 @@
 <script lang="ts">
-  import { useTradingStore } from '../stores/trading';
+  import { tradingStore } from '../stores/trading';
   import { executeMarketOrder } from '../engine/execution';
   import { positionManager } from '../engine/positions';
   import { PAIR_SPREADS } from '$shared/types';
 
-  let store = useTradingStore();
+  $: currentTick = $tradingStore.currentTick;
+  $: currentPair = $tradingStore.currentPair;
+  $: balance = $tradingStore.balance;
+  $: equity = $tradingStore.equity;
 
   let lotSize = 0.1;
   let orderType: 'market' | 'limit' | 'stop' = 'market';
@@ -12,34 +15,34 @@
   let stopPrice = 0;
 
   function handleBuy() {
-    if (!$store.currentTick) return;
+    if (!currentTick) return;
 
     if (orderType === 'market') {
       const position = executeMarketOrder(
         'buy',
         lotSize,
-        $store.currentTick.bid,
-        $store.currentTick.ask,
-        $store.currentTick.timestamp
+        currentTick.bid,
+        currentTick.ask,
+        currentTick.timestamp
       );
       positionManager.add(position);
-      store.addPosition(position);
+      tradingStore.addPosition(position);
     }
   }
 
   function handleSell() {
-    if (!$store.currentTick) return;
+    if (!currentTick) return;
 
     if (orderType === 'market') {
       const position = executeMarketOrder(
         'sell',
         lotSize,
-        $store.currentTick.bid,
-        $store.currentTick.ask,
-        $store.currentTick.timestamp
+        currentTick.bid,
+        currentTick.ask,
+        currentTick.timestamp
       );
       positionManager.add(position);
-      store.addPosition(position);
+      tradingStore.addPosition(position);
     }
   }
 
@@ -68,15 +71,15 @@
     <div class="price-display">
       <div class="bid">
         <span class="label">BID</span>
-        <span class="price sell-price">{$store.currentTick?.bid.toFixed(5) || '---'}</span>
+        <span class="price sell-price">{currentTick?.bid.toFixed(5) || '---'}</span>
       </div>
       <div class="spread">
         <span class="label">SPREAD</span>
-        <span class="value">{(PAIR_SPREADS[$store.currentPair] * 10000).toFixed(1)} pips</span>
+        <span class="value">{(PAIR_SPREADS[currentPair] * 10000).toFixed(1)} pips</span>
       </div>
       <div class="ask">
         <span class="label">ASK</span>
-        <span class="price buy-price">{$store.currentTick?.ask.toFixed(5) || '---'}</span>
+        <span class="price buy-price">{currentTick?.ask.toFixed(5) || '---'}</span>
       </div>
     </div>
 
@@ -137,16 +140,16 @@
     <div class="account-info">
       <div class="info-row">
         <span>Balance:</span>
-        <span class="value">${$store.balance.toFixed(2)}</span>
+        <span class="value">${balance.toFixed(2)}</span>
       </div>
       <div class="info-row">
         <span>Equity:</span>
-        <span class="value">${$store.equity.toFixed(2)}</span>
+        <span class="value">${equity.toFixed(2)}</span>
       </div>
       <div class="info-row">
         <span>Unrealized P&L:</span>
-        <span class="value" class:positive={$store.equity >= $store.balance} class:negative={$store.equity < $store.balance}>
-          ${($store.equity - $store.balance).toFixed(2)}
+        <span class="value" class:positive={equity >= balance} class:negative={equity < balance}>
+          ${(equity - balance).toFixed(2)}
         </span>
       </div>
     </div>

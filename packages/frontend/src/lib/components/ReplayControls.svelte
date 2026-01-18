@@ -1,8 +1,13 @@
 <script lang="ts">
-  import { useTradingStore } from '../stores/trading';
+  import { tradingStore } from '../stores/trading';
   import type { ForexPair } from '$shared/types';
 
-  let store = useTradingStore();
+  $: currentPair = $tradingStore.currentPair;
+  $: isPlaying = $tradingStore.isPlaying;
+  $: speed = $tradingStore.speed;
+  $: currentIndex = $tradingStore.currentIndex;
+  $: totalBars = $tradingStore.totalBars;
+  $: currentBar = $tradingStore.currentBar;
 
   export let onPlayPause: () => void;
   export let onSpeedChange: (speed: number) => void;
@@ -12,7 +17,7 @@
   const speeds = [1, 5, 10, 25, 50, 100];
 
   function handlePairChange() {
-    store.setCurrentPair(selectedPair);
+    tradingStore.setCurrentPair(selectedPair);
   }
 </script>
 
@@ -28,8 +33,8 @@
   </div>
 
   <div class="control-group">
-    <button class="btn btn-icon" on:click={onPlayPause} title={$store.isPlaying ? 'Pause' : 'Play'}>
-      {#if $store.isPlaying}
+    <button class="btn btn-icon" on:click={onPlayPause} title={isPlaying ? 'Pause' : 'Play'}>
+      {#if isPlaying}
         ⏸
       {:else}
         ▶
@@ -42,21 +47,21 @@
 
   <div class="control-group">
     <label for="speed-select">Speed:</label>
-    <select id="speed-select" bind:value={$store.speed} on:change={() => onSpeedChange($store.speed)}>
-      {#each speeds as speed}
-        <option value={speed}>{speed}x</option>
+    <select id="speed-select" bind:value={speed} on:change={() => onSpeedChange(speed)}>
+      {#each speeds as spd}
+        <option value={spd}>{spd}x</option>
       {/each}
     </select>
   </div>
 
   <div class="progress-bar">
-    <div class="progress-fill" style="width: {($store.currentIndex / $store.totalBars) * 100}%"></div>
+    <div class="progress-fill" style="width: {(currentIndex / totalBars) * 100}%"></div>
   </div>
 
   <div class="progress-text">
-    {$store.currentIndex} / {$store.totalBars} bars
-    {#if $store.currentBar}
-      | {new Date($store.currentBar.timestamp).toLocaleString()}
+    {currentIndex} / {totalBars} bars
+    {#if currentBar}
+      | {new Date(currentBar.timestamp).toLocaleString()}
     {/if}
   </div>
 </div>
