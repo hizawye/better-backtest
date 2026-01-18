@@ -56,10 +56,34 @@ export interface TickData {
 }
 
 export type ForexPair = 'EURUSD' | 'GBPUSD' | 'USDJPY' | 'USDCHF';
+export type IndexPair = 'NAS100' | 'US500';
+export type TradingPair = ForexPair | IndexPair;
 
-export const PAIR_SPREADS: Record<ForexPair, number> = {
+export const PAIR_SPREADS: Record<TradingPair, number> = {
+  // Forex pairs (in pips)
   EURUSD: 0.00015,  // 1.5 pips
   GBPUSD: 0.00015,  // 1.5 pips
   USDJPY: 0.015,    // 1.5 pips (JPY pairs different scale)
   USDCHF: 0.00025,  // 2.5 pips
+  // Index pairs (in points)
+  NAS100: 2.0,      // 2 points spread for NASDAQ 100
+  US500: 0.5,       // 0.5 points spread for S&P 500
+};
+
+export const PAIR_LABELS: Record<TradingPair, string> = {
+  EURUSD: 'EUR/USD',
+  GBPUSD: 'GBP/USD',
+  USDJPY: 'USD/JPY',
+  USDCHF: 'USD/CHF',
+  NAS100: 'NASDAQ 100',
+  US500: 'S&P 500',
+};
+
+export const PAIR_CATEGORIES: Record<TradingPair, 'forex' | 'index'> = {
+  EURUSD: 'forex',
+  GBPUSD: 'forex',
+  USDJPY: 'forex',
+  USDCHF: 'forex',
+  NAS100: 'index',
+  US500: 'index',
 };

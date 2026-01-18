@@ -2,12 +2,13 @@
   import { tradingStore } from '../stores/trading';
   import { executeMarketOrder } from '../engine/execution';
   import { positionManager } from '../engine/positions';
-  import { PAIR_SPREADS } from '$shared/types';
+  import { PAIR_SPREADS, PAIR_CATEGORIES } from '$shared/types';
 
   $: currentTick = $tradingStore.currentTick;
   $: currentPair = $tradingStore.currentPair;
   $: balance = $tradingStore.balance;
   $: equity = $tradingStore.equity;
+  $: isIndex = PAIR_CATEGORIES[currentPair] === 'index';
 
   let lotSize = 0.1;
   let orderType: 'market' | 'limit' | 'stop' = 'market';
@@ -71,15 +72,33 @@
     <div class="price-display">
       <div class="bid">
         <span class="label">BID</span>
-        <span class="price sell-price">{currentTick?.bid.toFixed(5) || '---'}</span>
+        <span class="price sell-price">
+          {#if currentTick}
+            {isIndex ? currentTick.bid.toFixed(2) : currentTick.bid.toFixed(5)}
+          {:else}
+            ---
+          {/if}
+        </span>
       </div>
       <div class="spread">
         <span class="label">SPREAD</span>
-        <span class="value">{(PAIR_SPREADS[currentPair] * 10000).toFixed(1)} pips</span>
+        <span class="value">
+          {#if isIndex}
+            {PAIR_SPREADS[currentPair].toFixed(1)} pts
+          {:else}
+            {(PAIR_SPREADS[currentPair] * 10000).toFixed(1)} pips
+          {/if}
+        </span>
       </div>
       <div class="ask">
         <span class="label">ASK</span>
-        <span class="price buy-price">{currentTick?.ask.toFixed(5) || '---'}</span>
+        <span class="price buy-price">
+          {#if currentTick}
+            {isIndex ? currentTick.ask.toFixed(2) : currentTick.ask.toFixed(5)}
+          {:else}
+            ---
+          {/if}
+        </span>
       </div>
     </div>
 

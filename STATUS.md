@@ -87,6 +87,7 @@ http://localhost:5173
 
 ### Data & Performance
 - ✅ 4 currency pairs (EUR/USD, GBP/USD, USD/JPY, USD/CHF)
+- ✅ 2 major indices (NASDAQ 100, S&P 500)
 - ✅ 1-minute historical bars
 - ✅ Provider fallback (Alpha Vantage → ForexRateAPI)
 - ✅ Redis cache (24h TTL, optional)

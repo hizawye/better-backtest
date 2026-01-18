@@ -1,10 +1,10 @@
 import { createStore } from 'zustand/vanilla';
 import { writable, derived, type Readable } from 'svelte/store';
-import type { Bar, Tick, Position, Order, Trade, ForexPair } from '$shared/types';
+import type { Bar, Tick, Position, Order, Trade, TradingPair } from '$shared/types';
 
 interface TradingState {
   // Market data
-  currentPair: ForexPair;
+  currentPair: TradingPair;
   currentBar: Bar | null;
   currentTick: Tick | null;
   bars: Bar[];
@@ -23,7 +23,7 @@ interface TradingState {
   totalBars: number;
 
   // Actions
-  setCurrentPair: (pair: ForexPair) => void;
+  setCurrentPair: (pair: TradingPair) => void;
   setCurrentBar: (bar: Bar) => void;
   setCurrentTick: (tick: Tick) => void;
   setBars: (bars: Bar[]) => void;

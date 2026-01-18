@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tradingStore } from '../stores/trading';
-  import type { ForexPair } from '$shared/types';
+  import type { TradingPair } from '$shared/types';
+  import { PAIR_LABELS } from '$shared/types';
 
   $: currentPair = $tradingStore.currentPair;
   $: isPlaying = $tradingStore.isPlaying;
@@ -13,7 +14,7 @@
   export let onSpeedChange: (speed: number) => void;
   export let onReset: () => void;
 
-  let selectedPair: ForexPair = 'EURUSD';
+  let selectedPair: TradingPair = 'EURUSD';
   const speeds = [1, 5, 10, 25, 50, 100];
 
   function handlePairChange() {
@@ -23,12 +24,18 @@
 
 <div class="replay-controls">
   <div class="control-group">
-    <label for="pair-select">Pair:</label>
+    <label for="pair-select">Instrument:</label>
     <select id="pair-select" bind:value={selectedPair} on:change={handlePairChange}>
-      <option value="EURUSD">EUR/USD</option>
-      <option value="GBPUSD">GBP/USD</option>
-      <option value="USDJPY">USD/JPY</option>
-      <option value="USDCHF">USD/CHF</option>
+      <optgroup label="Forex">
+        <option value="EURUSD">{PAIR_LABELS.EURUSD}</option>
+        <option value="GBPUSD">{PAIR_LABELS.GBPUSD}</option>
+        <option value="USDJPY">{PAIR_LABELS.USDJPY}</option>
+        <option value="USDCHF">{PAIR_LABELS.USDCHF}</option>
+      </optgroup>
+      <optgroup label="Indices">
+        <option value="NAS100">{PAIR_LABELS.NAS100}</option>
+        <option value="US500">{PAIR_LABELS.US500}</option>
+      </optgroup>
     </select>
   </div>
 

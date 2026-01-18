@@ -1,7 +1,13 @@
-import type { Bar } from '../../../shared/types';
+import type { Bar, TradingPair, PAIR_CATEGORIES } from '../../../shared/types';
 
 const API_KEY = process.env.ALPHA_VANTAGE_API_KEY || 'demo';
 const BASE_URL = 'https://www.alphavantage.co/query';
+
+// Map our index symbols to Alpha Vantage symbols
+const INDEX_SYMBOLS: Record<string, string> = {
+  NAS100: 'NDX',  // NASDAQ 100
+  US500: 'SPX',   // S&P 500
+};
 
 export interface AlphaVantageResponse {
   'Meta Data': {
@@ -22,19 +28,31 @@ export interface AlphaVantageResponse {
   };
 }
 
+function isIndexPair(pair: string): boolean {
+  return pair === 'NAS100' || pair === 'US500';
+}
+
 export async function fetchBars(
   pair: string,
   from: number,
   to: number
 ): Promise<Bar[]> {
-  // Alpha Vantage uses symbols like EUR/USD
-  const symbol = pair.slice(0, 3) + '/' + pair.slice(3);
-
   const url = new URL(BASE_URL);
-  url.searchParams.set('function', 'FX_INTRADAY');
-  url.searchParams.set('from_symbol', pair.slice(0, 3));
-  url.searchParams.set('to_symbol', pair.slice(3));
-  url.searchParams.set('interval', '1min');
+
+  if (isIndexPair(pair)) {
+    // Fetch index data
+    const symbol = INDEX_SYMBOLS[pair];
+    url.searchParams.set('function', 'TIME_SERIES_INTRADAY');
+    url.searchParams.set('symbol', symbol);
+    url.searchParams.set('interval', '1min');
+  } else {
+    // Fetch forex data
+    url.searchParams.set('function', 'FX_INTRADAY');
+    url.searchParams.set('from_symbol', pair.slice(0, 3));
+    url.searchParams.set('to_symbol', pair.slice(3));
+    url.searchParams.set('interval', '1min');
+  }
+
   url.searchParams.set('apikey', API_KEY);
   url.searchParams.set('outputsize', 'full');
   url.searchParams.set('datatype', 'json');
