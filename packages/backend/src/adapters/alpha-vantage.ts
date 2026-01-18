@@ -9,6 +9,24 @@ const INDEX_SYMBOLS: Record<string, string> = {
   US500: 'SPX',   // S&P 500
 };
 
+// Add timeout helper for fetch requests
+async function fetchWithTimeout(url: string, timeoutMs: number = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`API request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
 export interface AlphaVantageResponse {
   'Meta Data': {
     '1: Symbol': string;
@@ -57,7 +75,7 @@ export async function fetchBars(
   url.searchParams.set('outputsize', 'full');
   url.searchParams.set('datatype', 'json');
 
-  const response = await fetch(url.toString());
+  const response = await fetchWithTimeout(url.toString(), 10000);
 
   if (!response.ok) {
     throw new Error(`Alpha Vantage API error: ${response.statusText}`);

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.1] - 2026-01-18
+
+### Fixed
+- **Socket hang up errors** - Implemented layered timeout system to prevent indefinite API hangs
+  - Added `fetchWithTimeout` helper with AbortController to alpha-vantage.ts and forexrate.ts (10s timeout)
+  - Added provider-level timeout in aggregator.ts (12s per provider)
+  - Added request-level timeout in data.ts route handler (25s total)
+  - Configured Vite proxy timeout (30s)
+  - Increased Bun server idleTimeout to 120s
+  - Enhanced logging with visual indicators (✓/✗/→/⚡) for better debugging
+
+### Improved
+- Error messages now clearly indicate timeout failures instead of cryptic "socket hang up"
+- Each timeout layer completes before parent layer to prevent cascading hangs
+
 ## [0.1.0] - 2026-01-17
 
 ### Added

@@ -19,5 +19,6 @@ console.log(`🚀 Server running on http://localhost:${port}`);
 export default {
   port,
   fetch: app.fetch,
-  idleTimeout: 30, // 30 seconds timeout for long API calls
+  idleTimeout: 120, // 120 seconds timeout for long API calls
+  development: process.env.NODE_ENV !== 'production'
 };

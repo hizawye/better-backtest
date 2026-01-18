@@ -19,7 +19,14 @@ app.get('/:pair/:from/:to', async (c) => {
       return c.json({ error: `Unsupported instrument. Valid options: ${validPairs.join(', ')}` }, 400);
     }
 
-    const bars = await fetchBars(pair, from, to);
+    // Add request timeout
+    const REQUEST_TIMEOUT = 25000; // 25s total
+    const fetchPromise = fetchBars(pair, from, to);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout after 25s')), REQUEST_TIMEOUT)
+    );
+
+    const bars = await Promise.race([fetchPromise, timeoutPromise]);
 
     return c.json({
       pair,

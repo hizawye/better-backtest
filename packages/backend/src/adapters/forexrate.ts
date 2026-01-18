@@ -3,6 +3,24 @@ import type { Bar } from '../../../shared/types';
 const API_KEY = process.env.FOREXRATE_API_KEY || '';
 const BASE_URL = 'https://api.forexrateapi.com/v1';
 
+// Add timeout helper for fetch requests
+async function fetchWithTimeout(url: string, timeoutMs: number = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`API request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
 interface ForexRateResponse {
   success: boolean;
   timeseries: boolean;
@@ -34,7 +52,7 @@ export async function fetchBars(
   url.searchParams.set('start_date', fromDate);
   url.searchParams.set('end_date', toDate);
 
-  const response = await fetch(url.toString());
+  const response = await fetchWithTimeout(url.toString(), 10000);
 
   if (!response.ok) {
     throw new Error(`ForexRateAPI error: ${response.statusText}`);
