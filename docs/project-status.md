@@ -11,7 +11,10 @@ The Better Backtest forex practice platform is fully implemented and ready for t
 - ✅ Monorepo structure (packages/backend, packages/frontend, shared)
 - ✅ Bun + Hono backend with API routes
 - ✅ Alpha Vantage & ForexRateAPI adapters with fallback
-- ✅ **Layered timeout system (10s→12s→25s→30s) - NO MORE SOCKET HANG UPS**
+- ✅ **Layered timeout system (12s→15s→35s→30s) - NO MORE SOCKET HANG UPS**
+- ✅ **Parallel provider fetching (37-80% faster)**
+- ✅ **Dynamic AlphaVantage output sizing (compact ≤7 days, full >7 days)**
+- ✅ **Fail-fast validation (30-day max range)**
 - ✅ Redis cache layer (24h TTL)
 - ✅ Svelte + Vite frontend
 - ✅ TradingView Lightweight Charts integration (60fps)

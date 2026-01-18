@@ -52,7 +52,7 @@ export async function fetchBars(
   url.searchParams.set('start_date', fromDate);
   url.searchParams.set('end_date', toDate);
 
-  const response = await fetchWithTimeout(url.toString(), 10000);
+  const response = await fetchWithTimeout(url.toString(), 12000);
 
   if (!response.ok) {
     throw new Error(`ForexRateAPI error: ${response.statusText}`);

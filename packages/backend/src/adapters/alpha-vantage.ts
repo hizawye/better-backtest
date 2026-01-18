@@ -72,10 +72,14 @@ export async function fetchBars(
   }
 
   url.searchParams.set('apikey', API_KEY);
-  url.searchParams.set('outputsize', 'full');
+
+  // Use compact for short ranges (<=7 days), full for longer
+  const daysDiff = Math.ceil((to - from) / (1000 * 60 * 60 * 24));
+  url.searchParams.set('outputsize', daysDiff > 7 ? 'full' : 'compact');
+
   url.searchParams.set('datatype', 'json');
 
-  const response = await fetchWithTimeout(url.toString(), 10000);
+  const response = await fetchWithTimeout(url.toString(), 12000);
 
   if (!response.ok) {
     throw new Error(`Alpha Vantage API error: ${response.statusText}`);

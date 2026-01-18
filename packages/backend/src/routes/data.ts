@@ -19,11 +19,25 @@ app.get('/:pair/:from/:to', async (c) => {
       return c.json({ error: `Unsupported instrument. Valid options: ${validPairs.join(', ')}` }, 400);
     }
 
+    // Reject excessive date ranges
+    const daysDiff = Math.ceil((to - from) / (1000 * 60 * 60 * 24));
+    const MAX_DAYS = 30;
+
+    if (daysDiff > MAX_DAYS) {
+      return c.json({
+        error: `Date range too large: ${daysDiff} days requested, max ${MAX_DAYS} days allowed`
+      }, 400);
+    }
+
+    if (from >= to) {
+      return c.json({ error: 'Invalid date range: from must be before to' }, 400);
+    }
+
     // Add request timeout
-    const REQUEST_TIMEOUT = 25000; // 25s total
+    const REQUEST_TIMEOUT = 35000; // 35s total
     const fetchPromise = fetchBars(pair, from, to);
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Request timeout after 25s')), REQUEST_TIMEOUT)
+      setTimeout(() => reject(new Error('Request timeout after 35s')), REQUEST_TIMEOUT)
     );
 
     const bars = await Promise.race([fetchPromise, timeoutPromise]);
