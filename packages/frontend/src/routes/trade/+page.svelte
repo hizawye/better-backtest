@@ -9,7 +9,7 @@
   import PositionTable from '$lib/components/PositionTable.svelte';
   import TradeHistory from '$lib/components/TradeHistory.svelte';
   import ReplayControls from '$lib/components/ReplayControls.svelte';
-  import '../app.css';
+  import '../../app.css';
 
   let store = useTradingStore();
 

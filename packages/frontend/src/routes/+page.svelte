@@ -2,6 +2,10 @@
   import '../app.css';
 </script>
 
+<svelte:head>
+  <title>Better Backtest - Forex Practice Platform</title>
+</svelte:head>
+
 <div class="landing">
   <div class="hero">
     <h1>Better Backtest</h1>
