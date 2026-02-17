@@ -67,13 +67,30 @@
     return side === 'buy' ? currentTick.ask : currentTick.bid;
   }
 
-  function validateOrder(side: 'buy' | 'sell', size: number, entryPrice: number): string | null {
+  function validateOrder(
+    side: 'buy' | 'sell',
+    size: number,
+    entryPrice: number,
+    riskAmount?: number
+  ): string | null {
     if (!currentTick) return 'No market tick available.';
     if (!Number.isFinite(size) || size <= 0) return 'Order size must be greater than zero.';
     if (size > MAX_POSITION_SIZE) return `Max position size is ${MAX_POSITION_SIZE} lots.`;
 
     if (orderType === 'limit' && limitPrice <= 0) return 'Limit price is required for limit order.';
     if (orderType === 'stop' && stopPrice <= 0) return 'Stop trigger price is required for stop order.';
+    if (orderType === 'limit' && side === 'buy' && limitPrice >= currentTick.ask) {
+      return 'Buy limit must be below current ask.';
+    }
+    if (orderType === 'limit' && side === 'sell' && limitPrice <= currentTick.bid) {
+      return 'Sell limit must be above current bid.';
+    }
+    if (orderType === 'stop' && side === 'buy' && stopPrice <= currentTick.ask) {
+      return 'Buy stop must be above current ask.';
+    }
+    if (orderType === 'stop' && side === 'sell' && stopPrice >= currentTick.bid) {
+      return 'Sell stop must be below current bid.';
+    }
 
     const stopErr = validateStopTargets({
       side,
@@ -84,8 +101,12 @@
     if (stopErr) return stopErr;
 
     if (sizingMode === 'risk_percent') {
-      const riskAmount = (equity * riskPercent) / 100;
-      if (riskAmount > equity) return 'Insufficient equity for selected risk.';
+      const selectedRisk = (equity * riskPercent) / 100;
+      if (selectedRisk > equity) return 'Insufficient equity for selected risk.';
+    }
+
+    if (typeof riskAmount === 'number' && openRisk + riskAmount > equity) {
+      return 'Open risk plus trade risk exceeds available equity.';
     }
 
     return null;
@@ -112,7 +133,7 @@
     applyRrPreset('buy');
     const entryPrice = resolveEntryPrice('buy');
     const { size, riskAmount } = resolveSizeAndRisk(entryPrice, 'buy');
-    const error = validateOrder('buy', size, entryPrice);
+    const error = validateOrder('buy', size, entryPrice, riskAmount);
     if (error) {
       formError = error;
       return;
@@ -170,7 +191,7 @@
     applyRrPreset('sell');
     const entryPrice = resolveEntryPrice('sell');
     const { size, riskAmount } = resolveSizeAndRisk(entryPrice, 'sell');
-    const error = validateOrder('sell', size, entryPrice);
+    const error = validateOrder('sell', size, entryPrice, riskAmount);
     if (error) {
       formError = error;
       return;

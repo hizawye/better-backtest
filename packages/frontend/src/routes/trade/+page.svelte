@@ -29,6 +29,7 @@
   import type { BacktestSession, SessionEvent, SessionSnapshot, Timeframe, TradingPair } from '$shared/types';
   import { PAIR_SPREADS } from '$shared/types';
   import AnalyticsPanel from '$lib/components/AnalyticsPanel.svelte';
+  import AccountMetricsPanel from '$lib/components/AccountMetricsPanel.svelte';
   import Chart from '$lib/components/Chart.svelte';
   import EventLogPanel from '$lib/components/EventLogPanel.svelte';
   import JournalPanel from '$lib/components/JournalPanel.svelte';
@@ -639,6 +640,7 @@
 
     <div class="side-panel">
       <OrderPanel onSessionEvent={appendSessionEvent} />
+      <AccountMetricsPanel />
     </div>
   </div>
 
