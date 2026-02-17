@@ -3,7 +3,7 @@
   import { tradingStore } from '$lib/stores/trading';
   import { positionManager } from '$lib/engine/positions';
   import { orderBook } from '$lib/engine/orderbook';
-  import { computeAnalyticsSnapshot } from '$lib/engine/analytics';
+  import { computeAnalyticsSnapshot, computeCrossSessionAnalytics } from '$lib/engine/analytics';
   import { detectMinuteGaps } from '$lib/engine/data-quality';
   import { aggregateBarsByTimeframe } from '$lib/engine/timeframe';
   import { evaluateStopsOnBar, tryFillOrderOnBar } from '$lib/engine/execution';
@@ -14,6 +14,7 @@
     getSessionEvents,
     getSessionEntities,
     getJournalEntries,
+    listAllTrades,
     getSnapshot,
     listSessions,
     saveAttachment,
@@ -59,6 +60,7 @@
   $: spread = $tradingStore.spread;
   $: sessionEvents = $tradingStore.sessionEvents;
   $: analyticsSnapshot = $tradingStore.analyticsSnapshot;
+  $: crossSessionAnalytics = $tradingStore.crossSessionAnalytics;
 
   let worker: Worker | null = null;
   let isLoading = false;
@@ -200,6 +202,7 @@
 
     await loadData();
     appendSessionEvent('session_loaded', { sessionId: targetSessionId });
+    await refreshCrossSessionAnalytics();
   }
 
   async function createSession() {
@@ -580,7 +583,13 @@
     const snapshot = computeAnalyticsSnapshot(sessionId, trades, balance - trades.reduce((sum, t) => sum + t.realizedPnL, 0));
     tradingStore.setAnalyticsSnapshot(snapshot);
     void saveAnalyticsSnapshot(snapshot);
+    void refreshCrossSessionAnalytics();
     appendSessionEvent('analytics_updated', { trades: trades.length });
+  }
+
+  async function refreshCrossSessionAnalytics() {
+    const allTrades = await listAllTrades();
+    tradingStore.setCrossSessionAnalytics(computeCrossSessionAnalytics(allTrades));
   }
 
   // Keyboard shortcuts
@@ -650,7 +659,12 @@
       <TradeHistory />
       <EventLogPanel events={sessionEvents} />
       <JournalPanel onSaveEntry={handleSaveJournalEntry} />
-      <AnalyticsPanel snapshot={analyticsSnapshot} onExportCsv={exportSessionCsv} onExportJson={exportSessionJson} />
+      <AnalyticsPanel
+        snapshot={analyticsSnapshot}
+        crossSession={crossSessionAnalytics}
+        onExportCsv={exportSessionCsv}
+        onExportJson={exportSessionJson}
+      />
     </div>
   </div>
 </div>

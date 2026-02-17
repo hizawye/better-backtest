@@ -260,6 +260,10 @@ export async function getSessionEntities(sessionId: string): Promise<{
   return { orders, positions, trades };
 }
 
+export async function listAllTrades(): Promise<Trade[]> {
+  return db.trades.toArray();
+}
+
 export async function saveSessionEvents(sessionId: string, events: SessionEvent[]): Promise<void> {
   await db.transaction('rw', db.sessionEvents, async () => {
     await db.sessionEvents.where('sessionId').equals(sessionId).delete();

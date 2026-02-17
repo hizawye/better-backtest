@@ -189,6 +189,15 @@ export interface AnalyticsSnapshot {
   rDistribution: Array<{ bucket: string; count: number }>;
 }
 
+export interface CrossSessionAnalytics {
+  sessions: number;
+  trades: number;
+  totalPnL: number;
+  winRate: number;
+  bestSession: { sessionId: string; pnl: number } | null;
+  worstSession: { sessionId: string; pnl: number } | null;
+}
+
 export interface TickData {
   id: string;
   pair: string;

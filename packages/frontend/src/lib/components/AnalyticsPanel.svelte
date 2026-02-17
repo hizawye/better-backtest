@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { AnalyticsSnapshot } from '$shared/types';
+  import type { AnalyticsSnapshot, CrossSessionAnalytics } from '$shared/types';
 
   export let snapshot: AnalyticsSnapshot | null = null;
+  export let crossSession: CrossSessionAnalytics | null = null;
   export let onExportCsv: (() => void) | undefined;
   export let onExportJson: (() => void) | undefined;
 
@@ -34,6 +35,16 @@
     {#if !snapshot}
       <p class="empty">No analytics yet</p>
     {:else}
+      {#if crossSession}
+        <div class="cross-session">
+          <h4>Cross-Session</h4>
+          <div>Sessions: {crossSession.sessions}</div>
+          <div>Trades: {crossSession.trades}</div>
+          <div>Total PnL: ${crossSession.totalPnL.toFixed(2)}</div>
+          <div>Win Rate: {crossSession.winRate.toFixed(1)}%</div>
+        </div>
+      {/if}
+
       <div class="grid">
         <div>Total Trades: {snapshot.totalTrades}</div>
         <div>Win Rate: {snapshot.winRate}%</div>
@@ -147,6 +158,23 @@
   .histogram h4,
   .setups h4 {
     margin: 0 0 6px 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .cross-session {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .cross-session h4 {
+    margin: 0 0 4px 0;
+    grid-column: 1 / -1;
     font-size: 12px;
     color: var(--text-secondary);
   }

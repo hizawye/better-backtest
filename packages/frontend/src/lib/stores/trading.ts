@@ -4,6 +4,7 @@ import type {
   AnalyticsSnapshot,
   BacktestSession,
   Bar,
+  CrossSessionAnalytics,
   JournalEntry,
   Order,
   Position,
@@ -36,6 +37,7 @@ interface TradingState {
   journalEntries: JournalEntry[];
   sessionEvents: SessionEvent[];
   analyticsSnapshot: AnalyticsSnapshot | null;
+  crossSessionAnalytics: CrossSessionAnalytics | null;
   balance: number;
   equity: number;
   peakEquity: number;
@@ -81,6 +83,7 @@ interface TradingState {
   setSessionEvents: (events: SessionEvent[]) => void;
   addSessionEvent: (event: SessionEvent) => void;
   setAnalyticsSnapshot: (snapshot: AnalyticsSnapshot | null) => void;
+  setCrossSessionAnalytics: (snapshot: CrossSessionAnalytics | null) => void;
 
   setPlaying: (playing: boolean) => void;
   setSpeed: (speed: number) => void;
@@ -124,6 +127,7 @@ const store = createStore<TradingState>((set) => ({
   journalEntries: [],
   sessionEvents: [],
   analyticsSnapshot: null,
+  crossSessionAnalytics: null,
   balance: 10000,
   equity: 10000,
   peakEquity: 10000,
@@ -193,6 +197,7 @@ const store = createStore<TradingState>((set) => ({
   addSessionEvent: (event) =>
     set((state) => ({ sessionEvents: [...state.sessionEvents, event] })),
   setAnalyticsSnapshot: (analyticsSnapshot) => set({ analyticsSnapshot }),
+  setCrossSessionAnalytics: (crossSessionAnalytics) => set({ crossSessionAnalytics }),
 
   setPlaying: (playing) => set({ isPlaying: playing }),
   setSpeed: (speed) => set({ speed }),
@@ -237,6 +242,7 @@ const store = createStore<TradingState>((set) => ({
       journalEntries: [],
       sessionEvents: [],
       analyticsSnapshot: null,
+      crossSessionAnalytics: null,
       balance: 10000,
       equity: 10000,
       peakEquity: 10000,

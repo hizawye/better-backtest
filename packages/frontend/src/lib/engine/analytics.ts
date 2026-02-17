@@ -1,4 +1,4 @@
-import type { AnalyticsSnapshot, Trade } from '$shared/types';
+import type { AnalyticsSnapshot, CrossSessionAnalytics, Trade } from '$shared/types';
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
@@ -157,5 +157,44 @@ export function computeAnalyticsSnapshot(
     equityCurve,
     drawdownCurve,
     rDistribution
+  };
+}
+
+export function computeCrossSessionAnalytics(trades: Trade[]): CrossSessionAnalytics {
+  if (trades.length === 0) {
+    return {
+      sessions: 0,
+      trades: 0,
+      totalPnL: 0,
+      winRate: 0,
+      bestSession: null,
+      worstSession: null
+    };
+  }
+
+  const wins = trades.filter((trade) => trade.realizedPnL > 0).length;
+  const totalPnL = trades.reduce((sum, trade) => sum + trade.realizedPnL, 0);
+  const bySession = new Map<string, number>();
+
+  for (const trade of trades) {
+    if (!trade.sessionId) continue;
+    bySession.set(trade.sessionId, (bySession.get(trade.sessionId) || 0) + trade.realizedPnL);
+  }
+
+  const sessionPnL = Array.from(bySession.entries()).map(([sessionId, pnl]) => ({ sessionId, pnl }));
+  const bestSession = sessionPnL.length > 0
+    ? sessionPnL.reduce((best, current) => (current.pnl > best.pnl ? current : best))
+    : null;
+  const worstSession = sessionPnL.length > 0
+    ? sessionPnL.reduce((worst, current) => (current.pnl < worst.pnl ? current : worst))
+    : null;
+
+  return {
+    sessions: bySession.size,
+    trades: trades.length,
+    totalPnL: Number(totalPnL.toFixed(2)),
+    winRate: Number(((wins / trades.length) * 100).toFixed(1)),
+    bestSession,
+    worstSession
   };
 }
