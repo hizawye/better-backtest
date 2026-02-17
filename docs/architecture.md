@@ -38,6 +38,12 @@ Backend (Bun + Hono)
 5. Realized trades update balance/equity and append deterministic session event log entries.
 6. Session state persists entities + event log for resume/audit.
 
+## Risk UX Flow (Milestone 3)
+1. Trader selects sizing mode (fixed lot or risk-%).
+2. Order ticket validates stop/target geometry and order-type direction against live market.
+3. Risk checks evaluate open risk + proposed risk before execution.
+4. Account metrics panel updates continuously from store state (`balance/equity/openRisk/exposure/maxDD`).
+
 ## Request Flow (`/api/data/:pair/:from/:to`)
 1. Normalize pair (`NSXUSD` -> `NAS100`).
 2. Check Redis cache (fast-fail if Redis unavailable).

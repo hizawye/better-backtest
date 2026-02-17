@@ -28,6 +28,17 @@
 - Trade page replay loop now processes pending/SL/TP lifecycle deterministically each bar.
 - Session persistence now includes event log snapshots alongside orders/positions/trades.
 
+## [0.5.0] - 2026-02-17
+
+### Added
+- Milestone 3 risk tooling:
+  - Dedicated account metrics panel (balance, equity, open risk, used risk, exposure, max DD).
+  - Additional order guardrails for limit/stop placement relative to live bid/ask.
+
+### Changed
+- Order validation now blocks over-risked entries when open risk + trade risk exceeds equity.
+- Risk-focused UX flow tightened for discretionary risk-defined execution.
+
 ## [0.2.0] - 2026-02-16
 
 ### Added

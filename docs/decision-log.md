@@ -195,3 +195,17 @@
 **Rationale**:
 - Discretionary workflows commonly scale out and flatten across multiple positions.
 - Encoding this in engine/state avoids duplicated UI-side accounting logic.
+
+---
+
+## 2026-02-17 - Milestone 3 Risk UX Guardrails
+
+**Decision**: Enforce order-type directional constraints against current bid/ask
+**Rationale**:
+- Prevents unrealistic discretionary entries (for example invalid buy-stop below market).
+- Reduces user error and keeps backtests closer to executable conditions.
+
+**Decision**: Surface account risk metrics directly in trading view side panel
+**Rationale**:
+- Risk-aware discretionary decisions need live visibility of open risk and exposure.
+- Explicit max-drawdown/open-risk feedback helps avoid accidental overleveraging.
