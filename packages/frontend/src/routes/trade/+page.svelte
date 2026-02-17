@@ -4,30 +4,37 @@
   import { positionManager } from '$lib/engine/positions';
   import { orderBook } from '$lib/engine/orderbook';
   import { computeAnalyticsSnapshot, computeCrossSessionAnalytics } from '$lib/engine/analytics';
-  import { detectMinuteGaps } from '$lib/engine/data-quality';
-  import { aggregateBarsByTimeframe } from '$lib/engine/timeframe';
   import { evaluateStopsOnBar, tryFillOrderOnBar } from '$lib/engine/execution';
   import { closePosition } from '$lib/engine/pnl';
   import {
-    getAggregatedBars,
-    getBars,
+    getDrawings,
     getSessionEvents,
     getSessionEntities,
     getJournalEntries,
+    getToolPrefs,
     listAllTrades,
     getSnapshot,
     listSessions,
     saveAttachment,
-    saveAggregatedBars,
     saveAnalyticsSnapshot,
-    saveBars,
+    saveDrawings,
     saveJournalEntry,
     saveSession,
     saveSessionEvents,
     saveSessionEntities,
-    saveSnapshot
+    saveSnapshot,
+    saveToolPrefs
   } from '$lib/db/ticks';
-  import type { BacktestSession, SessionEvent, SessionSnapshot, Timeframe, TradingPair } from '$shared/types';
+  import type {
+    BacktestSession,
+    Bar,
+    DrawingEntity,
+    DrawingToolType,
+    SessionEvent,
+    SessionSnapshot,
+    Timeframe,
+    TradingPair
+  } from '$shared/types';
   import { PAIR_SPREADS } from '$shared/types';
   import AnalyticsPanel from '$lib/components/AnalyticsPanel.svelte';
   import AccountMetricsPanel from '$lib/components/AccountMetricsPanel.svelte';
@@ -41,6 +48,15 @@
   import '../../app.css';
 
   const SESSION_NAME_PREFIX = 'Backtest Session';
+  const TIMEFRAME_TO_MS: Record<Timeframe, number> = {
+    M1: 60_000,
+    M5: 300_000,
+    M15: 900_000,
+    H1: 3_600_000,
+    H4: 14_400_000,
+    D1: 86_400_000
+  };
+  type DockTab = 'positions' | 'trades' | 'events' | 'journal' | 'analytics';
 
   let sessions: BacktestSession[] = [];
   $: currentPair = $tradingStore.currentPair;
@@ -57,10 +73,22 @@
   $: positions = $tradingStore.positions;
   $: trades = $tradingStore.trades;
   $: currentIndex = $tradingStore.currentIndex;
+  $: totalBars = $tradingStore.totalBars;
   $: spread = $tradingStore.spread;
+  $: equity = $tradingStore.equity;
   $: sessionEvents = $tradingStore.sessionEvents;
+  $: drawings = $tradingStore.drawings;
+  $: activeTool = $tradingStore.activeTool;
+  $: selectedDrawingId = $tradingStore.selectedDrawingId;
+  $: magnetEnabled = $tradingStore.magnetEnabled;
+  $: drawingsVisible = $tradingStore.drawingsVisible;
+  $: toolStylePresets = $tradingStore.toolStylePresets;
   $: analyticsSnapshot = $tradingStore.analyticsSnapshot;
   $: crossSessionAnalytics = $tradingStore.crossSessionAnalytics;
+  $: chartViewKey = `${currentPair}_${currentTimeframe}_${rangeFrom}_${rangeTo}`;
+  $: unrealizedPnL = equity - balance;
+  $: replayProgressPct = totalBars > 0 ? (currentIndex / totalBars) * 100 : 0;
+  $: activeTimestampLabel = currentBar ? new Date(currentBar.timestamp).toLocaleString() : '--';
 
   let worker: Worker | null = null;
   let isLoading = false;
@@ -68,6 +96,171 @@
   let warningMessage = '';
   let isBootstrapping = true;
   let lastAnalyticsTradeCount = -1;
+  let latestLoadRequestId = 0;
+  let activeDockTab: DockTab = 'positions';
+  let drawingPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const chartTools: Array<{ id: DrawingToolType; label: string }> = [
+    { id: 'cursor', label: 'Cursor' },
+    { id: 'trend_line', label: 'Trend' },
+    { id: 'horizontal_line', label: 'HLine' },
+    { id: 'vertical_line', label: 'VLine' },
+    { id: 'rectangle', label: 'Rect' },
+    { id: 'text', label: 'Text' },
+    { id: 'arrow', label: 'Arrow' },
+    { id: 'ruler', label: 'Ruler' }
+  ];
+
+  const dockTabs: Array<{ id: DockTab; label: string }> = [
+    { id: 'positions', label: 'Positions' },
+    { id: 'trades', label: 'Trades' },
+    { id: 'events', label: 'Events' },
+    { id: 'journal', label: 'Journal' },
+    { id: 'analytics', label: 'Analytics' }
+  ];
+
+  type LoadDataOverrides = Partial<{
+    pair: TradingPair;
+    timeframe: Timeframe;
+    from: number;
+    to: number;
+    sessionId: string;
+    spread: number;
+    replayAnchor: number | null;
+  }>;
+
+  interface LoadDataRequestConfig {
+    pair: TradingPair;
+    timeframe: Timeframe;
+    from: number;
+    to: number;
+    sessionId: string;
+    spread: number;
+    replayAnchor: number | null;
+  }
+
+  function resolveLoadDataRequestConfig(overrides: LoadDataOverrides = {}): LoadDataRequestConfig {
+    return {
+      pair: overrides.pair ?? tradingStore.currentPair,
+      timeframe: overrides.timeframe ?? tradingStore.currentTimeframe,
+      from: overrides.from ?? tradingStore.rangeFrom,
+      to: overrides.to ?? tradingStore.rangeTo,
+      sessionId: overrides.sessionId ?? tradingStore.sessionId,
+      spread: overrides.spread ?? tradingStore.spread,
+      replayAnchor: overrides.replayAnchor ?? tradingStore.currentBar?.timestamp ?? null
+    };
+  }
+
+  function medianBarIntervalMs(localBars: Bar[]): number | null {
+    if (localBars.length < 2) return null;
+    const gaps: number[] = [];
+    for (let i = 1; i < localBars.length; i += 1) {
+      const gap = localBars[i].timestamp - localBars[i - 1].timestamp;
+      if (gap > 0) gaps.push(gap);
+      if (gaps.length >= 200) break;
+    }
+    if (gaps.length === 0) return null;
+    gaps.sort((a, b) => a - b);
+    const middle = Math.floor(gaps.length / 2);
+    if (gaps.length % 2 === 0) {
+      return Math.round((gaps[middle - 1] + gaps[middle]) / 2);
+    }
+    return gaps[middle];
+  }
+
+  function formatInterval(ms: number): string {
+    if (ms >= 86_400_000) return `${Math.round(ms / 86_400_000)}d`;
+    if (ms >= 3_600_000) return `${Math.round(ms / 3_600_000)}h`;
+    return `${Math.round(ms / 60_000)}m`;
+  }
+
+  function formatPrice(value: number): string {
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3
+    });
+  }
+
+  function dockCount(tab: DockTab): number {
+    if (tab === 'positions') return positions.length;
+    if (tab === 'trades') return trades.length;
+    if (tab === 'events') return sessionEvents.length;
+    if (tab === 'journal') return $tradingStore.journalEntries.length;
+    return analyticsSnapshot ? analyticsSnapshot.totalTrades : 0;
+  }
+
+  function queueDrawingPersist(targetSessionId = sessionId, targetPair = currentPair) {
+    if (!targetSessionId) return;
+    if (drawingPersistTimer) clearTimeout(drawingPersistTimer);
+    drawingPersistTimer = setTimeout(() => {
+      void saveDrawings(targetSessionId, targetPair, tradingStore.drawings);
+      drawingPersistTimer = null;
+    }, 160);
+  }
+
+  async function loadDrawingsForContext(targetSessionId: string, targetPair: TradingPair) {
+    const loaded = await getDrawings(targetSessionId, targetPair);
+    tradingStore.setDrawings(loaded);
+    tradingStore.setSelectedDrawing(null);
+  }
+
+  function handleToolSelect(tool: DrawingToolType) {
+    tradingStore.setActiveTool(tool);
+    void persistToolPrefs();
+  }
+
+  function handleToggleMagnet() {
+    tradingStore.setMagnetEnabled(!magnetEnabled);
+    void persistToolPrefs();
+  }
+
+  function handleToggleDrawingsVisible() {
+    tradingStore.setDrawingsVisible(!drawingsVisible);
+    void persistToolPrefs();
+  }
+
+  async function persistToolPrefs(targetSessionId = sessionId) {
+    if (!targetSessionId) return;
+    await saveToolPrefs(targetSessionId, {
+      activeTool,
+      magnetEnabled,
+      drawingsVisible,
+      stylePresets: toolStylePresets
+    });
+  }
+
+  function normalizeDrawing(input: DrawingEntity): DrawingEntity {
+    const toolStyle = toolStylePresets[input.tool];
+    return {
+      ...input,
+      sessionId,
+      pair: currentPair,
+      style: toolStyle ? { ...toolStyle } : input.style,
+      updatedAt: Date.now()
+    };
+  }
+
+  function handleCreateDrawing(input: DrawingEntity) {
+    const drawing = normalizeDrawing(input);
+    tradingStore.addDrawing(drawing);
+    tradingStore.setSelectedDrawing(drawing.id);
+    appendSessionEvent('drawing_created', { drawingId: drawing.id, tool: drawing.tool });
+    queueDrawingPersist();
+  }
+
+  function handleUpdateDrawing(input: DrawingEntity) {
+    tradingStore.updateDrawing(input.id, { ...input, updatedAt: Date.now() });
+    appendSessionEvent('drawing_updated', { drawingId: input.id, tool: input.tool });
+    queueDrawingPersist();
+  }
+
+  function handleDeleteDrawing(drawingId: string) {
+    const drawing = drawings.find((item) => item.id === drawingId);
+    if (!drawing) return;
+    tradingStore.removeDrawing(drawingId);
+    appendSessionEvent('drawing_deleted', { drawingId, tool: drawing.tool });
+    queueDrawingPersist();
+  }
 
   onMount(async () => {
     initWorker();
@@ -77,6 +270,10 @@
 
   onDestroy(() => {
     void persistCurrentSession();
+    if (drawingPersistTimer) {
+      clearTimeout(drawingPersistTimer);
+      drawingPersistTimer = null;
+    }
     if (worker) {
       worker.terminate();
     }
@@ -154,6 +351,8 @@
       trades
     });
     await saveSessionEvents(sessionId, sessionEvents);
+    await saveDrawings(sessionId, currentPair, drawings);
+    await persistToolPrefs(sessionId);
 
     const snapshot: SessionSnapshot = {
       sessionId,
@@ -179,11 +378,12 @@
 
     tradingStore.applySession(session);
 
-    const [snapshot, entities, events, journalEntries] = await Promise.all([
+    const [snapshot, entities, events, journalEntries, prefs] = await Promise.all([
       getSnapshot(targetSessionId),
       getSessionEntities(targetSessionId),
       getSessionEvents(targetSessionId),
-      getJournalEntries(targetSessionId)
+      getJournalEntries(targetSessionId),
+      getToolPrefs(targetSessionId)
     ]);
 
     orderBook.replaceAll(entities.orders);
@@ -193,6 +393,13 @@
     tradingStore.setTrades(entities.trades);
     tradingStore.setSessionEvents(events);
     tradingStore.setJournalEntries(journalEntries);
+    tradingStore.setToolStylePresets({});
+    if (prefs) {
+      tradingStore.setActiveTool(prefs.activeTool);
+      tradingStore.setMagnetEnabled(prefs.magnetEnabled);
+      tradingStore.setDrawingsVisible(prefs.drawingsVisible);
+      tradingStore.setToolStylePresets(prefs.stylePresets);
+    }
 
     if (snapshot) {
       tradingStore.setBalance(snapshot.balance);
@@ -200,7 +407,15 @@
       tradingStore.setProgress(snapshot.currentIndex, $tradingStore.totalBars);
     }
 
-    await loadData();
+    await loadData({
+      pair: session.config.pair,
+      timeframe: session.config.timeframe,
+      from: session.config.from,
+      to: session.config.to,
+      sessionId: session.id,
+      spread: session.config.execution.spread
+    });
+    await loadDrawingsForContext(targetSessionId, session.config.pair);
     appendSessionEvent('session_loaded', { sessionId: targetSessionId });
     await refreshCrossSessionAnalytics();
   }
@@ -235,78 +450,84 @@
     await loadSession(duplicate.id);
   }
 
-  async function loadData() {
+  async function loadData(overrides: LoadDataOverrides = {}) {
+    const requestId = ++latestLoadRequestId;
+    const requestConfig = resolveLoadDataRequestConfig(overrides);
     isLoading = true;
     errorMessage = '';
     warningMessage = '';
-    const replayAnchor = currentBar?.timestamp;
 
     try {
-      // Try to load from IndexedDB first
-      let sourceBars = await getBars(currentPair, rangeFrom, rangeTo);
-
-      if (sourceBars.length === 0) {
-        // Fetch from API
-        const response = await fetch(
-          `/api/data/${currentPair}/${rangeFrom}/${rangeTo}?sessionId=${encodeURIComponent(sessionId)}&timeframe=M1`
-        );
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        sourceBars = data.bars;
-
-        // Save to IndexedDB
-        await saveBars(currentPair, sourceBars);
+      const response = await fetch(
+        `/api/data/${requestConfig.pair}/${requestConfig.from}/${requestConfig.to}?sessionId=${encodeURIComponent(requestConfig.sessionId)}&timeframe=${requestConfig.timeframe}`
+      );
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
 
-      if (sourceBars.length === 0) {
+      const data = await response.json() as {
+        timeframe?: string;
+        bars?: Bar[];
+      };
+      const timeframeBars = (data.bars ?? []).slice().sort((a, b) => a.timestamp - b.timestamp);
+
+      if (timeframeBars.length === 0) {
         throw new Error('No market data found for selected range.');
       }
 
-      const gaps = detectMinuteGaps(sourceBars);
-      if (gaps.length > 0) {
-        const totalMissing = gaps.reduce((sum, gap) => sum + gap.missingBars, 0);
-        warningMessage = `Detected ${gaps.length} data gap(s), ${totalMissing} missing minute bars.`;
+      const diagnostics: string[] = [];
+      if (typeof data.timeframe === 'string' && data.timeframe !== requestConfig.timeframe) {
+        diagnostics.push(`API responded with ${data.timeframe}, expected ${requestConfig.timeframe}.`);
       }
 
-      let timeframeBars = currentTimeframe === 'M1'
-        ? sourceBars
-        : await getAggregatedBars(sessionId, currentPair, currentTimeframe, rangeFrom, rangeTo);
-
-      if (timeframeBars.length === 0) {
-        timeframeBars = aggregateBarsByTimeframe(sourceBars, currentTimeframe);
-        if (sessionId && currentTimeframe !== 'M1') {
-          await saveAggregatedBars(sessionId, currentPair, currentTimeframe, timeframeBars);
+      const detectedIntervalMs = medianBarIntervalMs(timeframeBars);
+      const expectedIntervalMs = TIMEFRAME_TO_MS[requestConfig.timeframe];
+      if (detectedIntervalMs !== null) {
+        const toleranceMs = Math.max(1_000, Math.floor(expectedIntervalMs * 0.2));
+        if (Math.abs(detectedIntervalMs - expectedIntervalMs) > toleranceMs) {
+          diagnostics.push(
+            `Loaded interval is ~${formatInterval(detectedIntervalMs)} while selected timeframe is ${requestConfig.timeframe}.`
+          );
+          console.warn('[data] timeframe mismatch detected', {
+            pair: requestConfig.pair,
+            timeframe: requestConfig.timeframe,
+            expectedIntervalMs,
+            detectedIntervalMs,
+            bars: timeframeBars.length
+          });
         }
       }
 
-      tradingStore.setSourceBars(sourceBars);
+      if (requestId !== latestLoadRequestId) return;
+
+      warningMessage = diagnostics.join(' ');
+      tradingStore.setSourceBars(timeframeBars);
       tradingStore.setBars(timeframeBars);
       tradingStore.resetForReplay();
-
-      if (replayAnchor) {
-        seekToTimestamp(replayAnchor, timeframeBars);
-      }
 
       if (worker) {
         worker.postMessage({
           type: 'init',
           payload: {
             bars: timeframeBars,
-            spread,
-            sessionId,
-            timeframe: currentTimeframe
+            spread: requestConfig.spread,
+            sessionId: requestConfig.sessionId,
+            timeframe: requestConfig.timeframe
           }
         });
       }
+
+      if (requestConfig.replayAnchor) {
+        seekToTimestamp(requestConfig.replayAnchor, timeframeBars);
+      }
     } catch (error) {
+      if (requestId !== latestLoadRequestId) return;
       console.error('Failed to load data:', error);
       errorMessage = error instanceof Error ? error.message : 'Failed to load data';
     } finally {
-      isLoading = false;
+      if (requestId === latestLoadRequestId) {
+        isLoading = false;
+      }
     }
   }
 
@@ -432,26 +653,28 @@
   }
 
   async function handlePairChange(pair: TradingPair) {
-    tradingStore.setCurrentPair(pair);
-    tradingStore.setExecutionConfig({ spread: PAIR_SPREADS[pair] });
-    if (worker) {
-      worker.postMessage({ type: 'applyExecutionConfig', payload: { spread: PAIR_SPREADS[pair] } });
+    if (sessionId) {
+      await saveDrawings(sessionId, currentPair, drawings);
     }
-    await loadData();
+    const nextSpread = PAIR_SPREADS[pair];
+    tradingStore.setCurrentPair(pair);
+    tradingStore.setExecutionConfig({ spread: nextSpread });
+    if (worker) {
+      worker.postMessage({ type: 'applyExecutionConfig', payload: { spread: nextSpread } });
+    }
+    await loadData({ pair, spread: nextSpread });
+    await loadDrawingsForContext(sessionId, pair);
   }
 
   async function handleTimeframeChange(timeframe: Timeframe) {
     tradingStore.setTimeframe(timeframe);
     appendSessionEvent('timeframe_changed', { timeframe });
-    if (worker) {
-      worker.postMessage({ type: 'setTimeframe', payload: { timeframe } });
-    }
-    await loadData();
+    await loadData({ timeframe });
   }
 
   async function handleDateRangeChange(from: number, to: number) {
     tradingStore.setDateRange(from, to);
-    await loadData();
+    await loadData({ from, to });
   }
 
   async function handleSaveSession() {
@@ -606,90 +829,329 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <div class="app-container">
-  <div class="header">
-    <div class="logo">
-      <h1>Better Backtest</h1>
-      <span class="pair-badge">{currentPair}</span>
+  <div class="header terminal-header">
+    <div class="control-strip">
+      <div class="brand-block">
+        <h1>Better Backtest</h1>
+        <div class="brand-sub mono">
+          <span>{sessionName}</span>
+          <span>{activeTimestampLabel}</span>
+        </div>
+      </div>
+      <ReplayControls
+        onPlayPause={handlePlayPause}
+        onSpeedChange={handleSpeedChange}
+        onReset={handleReset}
+        onPairChange={handlePairChange}
+        onTimeframeChange={handleTimeframeChange}
+        onDateRangeChange={handleDateRangeChange}
+        onCreateSession={createSession}
+        onDuplicateSession={duplicateSession}
+        onSaveSession={handleSaveSession}
+        onLoadSession={loadSession}
+        {sessions}
+        activeSessionId={sessionId}
+      />
+      <div class="header-metrics mono">
+        <span>Balance ${balance.toFixed(2)}</span>
+        <span class:positive={unrealizedPnL > 0} class:negative={unrealizedPnL < 0}>
+          UPNL ${unrealizedPnL.toFixed(2)}
+        </span>
+        <span>Open {positions.length}</span>
+        <span>Orders {orders.length}</span>
+      </div>
     </div>
-    <ReplayControls
-      onPlayPause={handlePlayPause}
-      onSpeedChange={handleSpeedChange}
-      onReset={handleReset}
-      onPairChange={handlePairChange}
-      onTimeframeChange={handleTimeframeChange}
-      onDateRangeChange={handleDateRangeChange}
-      onCreateSession={createSession}
-      onDuplicateSession={duplicateSession}
-      onSaveSession={handleSaveSession}
-      onLoadSession={loadSession}
-      {sessions}
-      activeSessionId={sessionId}
-    />
   </div>
 
   <div class="main-content">
     <div class="chart-area">
-      {#if isLoading}
-        <div class="loading-overlay">
-          <div class="spinner"></div>
-          <p>Loading market data...</p>
+      <div class="chart-shell">
+        <div class="chart-shell-head">
+          <div class="instrument-line">
+            <strong class="mono">{currentPair}</strong>
+            <span>{currentTimeframe}</span>
+            <span>Bars {bars.length}</span>
+            {#if currentBar}
+              <span class="mono ohlc-line">
+                O {formatPrice(currentBar.open)} H {formatPrice(currentBar.high)} L {formatPrice(currentBar.low)} C {formatPrice(currentBar.close)}
+              </span>
+            {/if}
+          </div>
+          {#if warningMessage}
+            <span class="warning-pill">Data Warning</span>
+          {:else}
+            <span class="ok-pill">Feed Healthy</span>
+          {/if}
         </div>
-      {:else if errorMessage}
-        <div class="error-overlay">
-          <p class="error-message">{errorMessage}</p>
-          <button class="btn" on:click={loadData}>Retry</button>
-        </div>
-      {:else}
-        {#if warningMessage}
-          <div class="warning-banner">{warningMessage}</div>
+
+        {#if isLoading}
+          <div class="loading-overlay">
+            <div class="spinner"></div>
+            <p>Loading market data...</p>
+          </div>
+        {:else if errorMessage}
+          <div class="error-overlay">
+            <p class="error-message">{errorMessage}</p>
+            <button class="btn" on:click={() => loadData()}>Retry</button>
+          </div>
+        {:else}
+          {#if warningMessage}
+            <div class="warning-banner">{warningMessage}</div>
+          {/if}
+          <div class="chart-host">
+            <div class="chart-workspace">
+              <aside class="chart-toolbar">
+                {#each chartTools as tool}
+                  <button
+                    class="tool-btn mono"
+                    class:active={activeTool === tool.id}
+                    on:click={() => handleToolSelect(tool.id)}
+                    title={tool.id}
+                  >
+                    {tool.label}
+                  </button>
+                {/each}
+                <button class="tool-btn mono" class:active={magnetEnabled} on:click={handleToggleMagnet}>
+                  Magnet
+                </button>
+                <button class="tool-btn mono" class:active={drawingsVisible} on:click={handleToggleDrawingsVisible}>
+                  Show
+                </button>
+                <button
+                  class="tool-btn mono danger"
+                  on:click={() => {
+                    for (const drawing of drawings) {
+                      appendSessionEvent('drawing_deleted', { drawingId: drawing.id, tool: drawing.tool });
+                    }
+                    tradingStore.clearDrawings();
+                    queueDrawingPersist();
+                  }}
+                  disabled={drawings.length === 0}
+                >
+                  Clear
+                </button>
+              </aside>
+
+              {#key chartViewKey}
+                <Chart
+                  bars={bars}
+                  currentBar={currentBar}
+                  timeframe={currentTimeframe}
+                  pair={currentPair}
+                  {sessionId}
+                  drawings={drawings}
+                  activeTool={activeTool}
+                  selectedDrawingId={selectedDrawingId}
+                  magnetEnabled={magnetEnabled}
+                  drawingsVisible={drawingsVisible}
+                  positions={positions}
+                  onCreateDrawing={handleCreateDrawing}
+                  onUpdateDrawing={handleUpdateDrawing}
+                  onDeleteDrawing={handleDeleteDrawing}
+                  onSelectDrawing={(drawingId) => tradingStore.setSelectedDrawing(drawingId)}
+                />
+              {/key}
+            </div>
+          </div>
+          <div class="chart-footer mono">
+            <span>{activeTimestampLabel}</span>
+            <span>Progress {replayProgressPct.toFixed(1)}%</span>
+            <span>Spread {spread.toFixed(2)}</span>
+          </div>
         {/if}
-        <Chart bars={bars} currentBar={currentBar} />
-      {/if}
+      </div>
     </div>
 
-    <div class="side-panel">
+    <div class="side-panel right-rail">
+      <div class="rail-head">
+        <span>Trade Ticket</span>
+        <span class="mono">{currentPair} {currentTimeframe}</span>
+      </div>
       <OrderPanel onSessionEvent={appendSessionEvent} />
       <AccountMetricsPanel />
     </div>
   </div>
 
   <div class="bottom-panel">
-    <div class="panel-tabs">
-      <PositionTable onSessionEvent={appendSessionEvent} />
-      <TradeHistory />
-      <EventLogPanel events={sessionEvents} />
-      <JournalPanel onSaveEntry={handleSaveJournalEntry} />
-      <AnalyticsPanel
-        snapshot={analyticsSnapshot}
-        crossSession={crossSessionAnalytics}
-        onExportCsv={exportSessionCsv}
-        onExportJson={exportSessionJson}
-      />
+    <div class="dock-tabs">
+      {#each dockTabs as tab}
+        <button
+          class="dock-tab"
+          class:active={activeDockTab === tab.id}
+          on:click={() => (activeDockTab = tab.id)}
+        >
+          {tab.label}
+          <span class="dock-count mono">{dockCount(tab.id)}</span>
+        </button>
+      {/each}
+    </div>
+
+    <div class="dock-body">
+      <section class="dock-panel" class:active={activeDockTab === 'positions'}>
+        <PositionTable onSessionEvent={appendSessionEvent} />
+      </section>
+      <section class="dock-panel" class:active={activeDockTab === 'trades'}>
+        <TradeHistory />
+      </section>
+      <section class="dock-panel" class:active={activeDockTab === 'events'}>
+        <EventLogPanel events={sessionEvents} />
+      </section>
+      <section class="dock-panel" class:active={activeDockTab === 'journal'}>
+        <JournalPanel onSaveEntry={handleSaveJournalEntry} />
+      </section>
+      <section class="dock-panel" class:active={activeDockTab === 'analytics'}>
+        <AnalyticsPanel
+          snapshot={analyticsSnapshot}
+          crossSession={crossSessionAnalytics}
+          onExportCsv={exportSessionCsv}
+          onExportJson={exportSessionJson}
+        />
+      </section>
     </div>
   </div>
 </div>
 
 <style>
-  .logo {
+  .app-container {
+    grid-template-rows: 64px minmax(0, 1fr) 230px;
+  }
+
+  .terminal-header {
+    padding: 0 10px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    border-bottom-color: rgba(71, 85, 105, 0.5);
   }
 
-  .logo h1 {
+  .control-strip {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .brand-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 150px;
+  }
+
+  .brand-block h1 {
     margin: 0;
-    font-size: 18px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text-primary);
+    letter-spacing: 0.2px;
   }
 
-  .pair-badge {
-    padding: 4px 10px;
-    background: var(--accent-color);
-    border-radius: 4px;
-    font-size: 12px;
+  .brand-sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-low);
+    min-width: 0;
+  }
+
+  .brand-sub span {
+    padding: 1px 4px;
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    background: #111923;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .control-strip :global(.replay-controls) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .header-metrics {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-mid);
+    white-space: nowrap;
+  }
+
+  .header-metrics .positive {
+    color: var(--bull);
+  }
+
+  .header-metrics .negative {
+    color: var(--bear);
+  }
+
+  .header-metrics span {
+    padding: 4px 6px;
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    background: #111923;
+  }
+
+  .chart-shell {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    overflow: hidden;
+    background: #0f151f;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .chart-shell-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    background: #101824;
+  }
+
+  .instrument-line {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--text-mid);
+    font-size: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .instrument-line strong {
+    color: var(--text-hi);
+    font-size: 11px;
+  }
+
+  .ohlc-line {
+    color: #94a8c3;
+  }
+
+  .ok-pill,
+  .warning-pill {
+    padding: 3px 8px;
+    font-size: 10px;
     font-weight: 600;
-    color: white;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .ok-pill {
+    color: #97e2bd;
+    background: rgba(20, 184, 122, 0.16);
+    border: 1px solid rgba(20, 184, 122, 0.45);
+  }
+
+  .warning-pill {
+    color: #ffd08a;
+    background: rgba(243, 179, 90, 0.16);
+    border: 1px solid rgba(243, 179, 90, 0.45);
   }
 
   .loading-overlay,
@@ -699,6 +1161,7 @@
     align-items: center;
     justify-content: center;
     height: 100%;
+    min-height: 0;
     gap: 16px;
   }
 
@@ -726,12 +1189,11 @@
   }
 
   .btn {
-    padding: 8px 16px;
+    padding: 7px 12px;
     background: var(--accent-color);
     border: none;
-    border-radius: 4px;
     color: white;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
   }
@@ -740,26 +1202,230 @@
     opacity: 0.85;
   }
 
-  .panel-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: 1fr 1fr;
-    gap: 1px;
-    background: var(--border-color);
-    height: 100%;
+  .chart-area {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
   }
 
-  .panel-tabs > :global(*) {
-    background: var(--bg-secondary);
+  .chart-host {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .chart-workspace {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 68px minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .chart-toolbar {
+    border-right: 1px solid rgba(38, 49, 66, 0.75);
+    background: #0f1824;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 6px;
+    overflow-y: auto;
+  }
+
+  .tool-btn {
+    border: 1px solid rgba(51, 65, 85, 0.65);
+    background: #141e2b;
+    color: var(--text-mid);
+    font-size: 10px;
+    padding: 6px 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .tool-btn:hover {
+    border-color: rgba(130, 156, 191, 0.75);
+  }
+
+  .tool-btn.active {
+    color: #dce9ff;
+    border-color: rgba(76, 141, 255, 0.75);
+    background: rgba(76, 141, 255, 0.18);
+  }
+
+  .tool-btn.danger {
+    color: #fecaca;
+    border-color: rgba(220, 38, 38, 0.45);
+    background: rgba(127, 29, 29, 0.35);
+  }
+
+  .tool-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .chart-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 5px 10px;
+    border-top: 1px solid rgba(38, 49, 66, 0.65);
+    background: #101824;
+    color: var(--text-low);
+    font-size: 10px;
   }
 
   .warning-banner {
-    margin: 8px 12px 0 12px;
+    margin: 7px 10px 0;
     padding: 6px 10px;
-    border-radius: 4px;
-    font-size: 12px;
+    font-size: 11px;
     color: #ffd08a;
     border: 1px solid rgba(255, 208, 138, 0.5);
     background: rgba(255, 178, 58, 0.15);
+  }
+
+  .right-rail {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .rail-head {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
+    color: var(--text-low);
+    background: #111924;
+  }
+
+  .right-rail :global(.order-panel),
+  .right-rail :global(.metrics-panel) {
+    border-radius: 0;
+  }
+
+  .dock-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 0 6px;
+    overflow-x: auto;
+  }
+
+  .dock-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-bottom: none;
+    background: #101824;
+    color: var(--text-mid);
+    padding: 6px 10px 7px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .dock-count {
+    font-size: 10px;
+    color: var(--text-low);
+  }
+
+  .dock-tab.active {
+    color: #d9e7ff;
+    border-color: rgba(76, 141, 255, 0.6);
+    background: rgba(76, 141, 255, 0.18);
+  }
+
+  .dock-body {
+    background: var(--bg-panel);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    height: calc(100% - 34px);
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .dock-panel {
+    position: absolute;
+    inset: 0;
+    display: none;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .dock-panel.active {
+    display: flex;
+    flex-direction: column;
+  }
+
+  @media (max-width: 1199px) {
+    .app-container {
+      grid-template-rows: 104px minmax(0, 1fr) 210px;
+    }
+
+    .header-metrics {
+      display: none;
+    }
+
+    .control-strip {
+      height: 100%;
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 6px;
+      padding: 6px 0;
+    }
+
+    .brand-block {
+      width: 100%;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .control-strip :global(.replay-controls) {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .app-container {
+      grid-template-rows: 110px minmax(0, 1fr) 240px;
+    }
+
+    .control-strip {
+      gap: 4px;
+    }
+
+    .dock-body {
+      height: calc(100% - 40px);
+    }
+
+    .chart-workspace {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .chart-toolbar {
+      border-right: 0;
+      border-bottom: 1px solid rgba(38, 49, 66, 0.75);
+      flex-direction: row;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 6px;
+    }
+
+    .tool-btn {
+      min-width: 62px;
+    }
   }
 </style>

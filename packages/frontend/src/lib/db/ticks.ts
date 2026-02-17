@@ -4,12 +4,16 @@ import type {
   AnalyticsSnapshot,
   BacktestSession,
   Bar,
+  DrawingEntity,
+  DrawingStyle,
+  DrawingToolType,
   JournalEntry,
   Order,
   Position,
   SessionEvent,
   SessionSnapshot,
   Timeframe,
+  TradingPair,
   Trade
 } from '$shared/types';
 
@@ -40,6 +44,27 @@ interface AggregatedBarRecord extends BarRecord {
   timeframe: Timeframe;
 }
 
+type ToolStylePresetMap = Partial<
+  Record<Exclude<DrawingToolType, 'cursor' | 'risk_position'>, DrawingStyle>
+>;
+
+interface ToolPrefsRecord {
+  id: string;
+  sessionId: string;
+  activeTool: DrawingToolType;
+  magnetEnabled: boolean;
+  drawingsVisible: boolean;
+  stylePresets: ToolStylePresetMap;
+  updatedAt: number;
+}
+
+export interface ToolPrefsPayload {
+  activeTool: DrawingToolType;
+  magnetEnabled: boolean;
+  drawingsVisible: boolean;
+  stylePresets: ToolStylePresetMap;
+}
+
 const db = new Dexie('BetterBacktest') as Dexie & {
   bars: EntityTable<BarRecord, 'id'>;
   aggregatedBars: EntityTable<AggregatedBarRecord, 'id'>;
@@ -52,6 +77,8 @@ const db = new Dexie('BetterBacktest') as Dexie & {
   journalEntries: EntityTable<JournalEntry, 'id'>;
   attachments: EntityTable<Attachment, 'id'>;
   analyticsSnapshots: EntityTable<AnalyticsSnapshot, 'id'>;
+  drawings: EntityTable<DrawingEntity, 'id'>;
+  toolPrefs: EntityTable<ToolPrefsRecord, 'id'>;
 };
 
 db.version(1).stores({
@@ -81,6 +108,22 @@ db.version(3).stores({
   journalEntries: 'id, sessionId, timestamp, reviewStatus',
   attachments: 'id, sessionId, journalEntryId, createdAt',
   analyticsSnapshots: 'id, sessionId, createdAt'
+});
+
+db.version(4).stores({
+  bars: 'id, pair, timestamp',
+  aggregatedBars: 'id, sessionId, pair, timeframe, timestamp',
+  sessions: 'id, updatedAt, pair, timeframe, from, to',
+  snapshots: 'sessionId, savedAt',
+  orders: 'id, sessionId, status, createdAt',
+  positions: 'id, sessionId, entryTime',
+  trades: 'id, sessionId, exitTime',
+  sessionEvents: 'id, sessionId, sequence, timestamp, type',
+  journalEntries: 'id, sessionId, timestamp, reviewStatus',
+  attachments: 'id, sessionId, journalEntryId, createdAt',
+  analyticsSnapshots: 'id, sessionId, createdAt',
+  drawings: 'id, sessionId, pair, tool, updatedAt, [sessionId+pair]',
+  toolPrefs: 'id, sessionId, updatedAt'
 });
 
 export async function saveBars(pair: string, bars: Bar[]): Promise<void> {
@@ -303,6 +346,47 @@ export async function getAttachmentsForJournal(journalEntryId: string): Promise<
 
 export async function getAttachmentsForSession(sessionId: string): Promise<Attachment[]> {
   return db.attachments.where('sessionId').equals(sessionId).toArray();
+}
+
+export async function saveDrawings(
+  sessionId: string,
+  pair: TradingPair,
+  drawings: DrawingEntity[]
+): Promise<void> {
+  await db.transaction('rw', db.drawings, async () => {
+    await db.drawings.where('[sessionId+pair]').equals([sessionId, pair]).delete();
+    if (drawings.length > 0) {
+      await db.drawings.bulkPut(drawings.map((drawing) => ({ ...drawing, sessionId, pair })));
+    }
+  });
+}
+
+export async function getDrawings(sessionId: string, pair: TradingPair): Promise<DrawingEntity[]> {
+  const drawings = await db.drawings.where('[sessionId+pair]').equals([sessionId, pair]).toArray();
+  return drawings.sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0) || a.updatedAt - b.updatedAt);
+}
+
+export async function saveToolPrefs(sessionId: string, prefs: ToolPrefsPayload): Promise<void> {
+  await db.toolPrefs.put({
+    id: `toolprefs_${sessionId}`,
+    sessionId,
+    activeTool: prefs.activeTool,
+    magnetEnabled: prefs.magnetEnabled,
+    drawingsVisible: prefs.drawingsVisible,
+    stylePresets: prefs.stylePresets,
+    updatedAt: Date.now()
+  });
+}
+
+export async function getToolPrefs(sessionId: string): Promise<ToolPrefsPayload | undefined> {
+  const record = await db.toolPrefs.get(`toolprefs_${sessionId}`);
+  if (!record) return undefined;
+  return {
+    activeTool: record.activeTool,
+    magnetEnabled: record.magnetEnabled,
+    drawingsVisible: record.drawingsVisible,
+    stylePresets: record.stylePresets
+  };
 }
 
 export { db };

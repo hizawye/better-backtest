@@ -74,6 +74,65 @@ export interface Trade {
 
 export type Timeframe = 'M1' | 'M5' | 'M15' | 'H1' | 'H4' | 'D1';
 
+export type DrawingToolType =
+  | 'cursor'
+  | 'trend_line'
+  | 'horizontal_line'
+  | 'vertical_line'
+  | 'ray'
+  | 'extended_line'
+  | 'rectangle'
+  | 'text'
+  | 'arrow'
+  | 'ruler'
+  | 'fibonacci'
+  | 'brush'
+  | 'risk_position';
+
+export interface DrawingPoint {
+  timestamp: number;
+  price: number;
+}
+
+export interface DrawingStyle {
+  color: string;
+  lineWidth: number;
+  lineStyle: 'solid' | 'dashed' | 'dotted';
+  fillColor?: string;
+  fillOpacity?: number;
+  textSize?: number;
+}
+
+export interface DrawingEntity {
+  id: string;
+  sessionId: string;
+  pair: TradingPair;
+  tool: Exclude<DrawingToolType, 'cursor' | 'risk_position'>;
+  points: DrawingPoint[];
+  style: DrawingStyle;
+  text?: string;
+  locked?: boolean;
+  hidden?: boolean;
+  zIndex?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChartToolState {
+  activeTool: DrawingToolType;
+  selectedDrawingId: string | null;
+  magnetEnabled: boolean;
+  drawingsVisible: boolean;
+}
+
+export interface RiskToolDraft {
+  entry: DrawingPoint;
+  stop: DrawingPoint;
+  takeProfit?: DrawingPoint | null;
+  side: 'buy' | 'sell';
+  createdAt: number;
+}
+
 export interface ExecutionConfig {
   spread: number;
   slippage: number;
@@ -122,7 +181,13 @@ export type SessionEventType =
   | 'replay_seek'
   | 'timeframe_changed'
   | 'session_loaded'
-  | 'session_saved';
+  | 'session_saved'
+  | 'drawing_created'
+  | 'drawing_updated'
+  | 'drawing_deleted'
+  | 'risk_tool_opened'
+  | 'risk_tool_confirmed'
+  | 'position_level_dragged';
 
 export interface SessionEvent {
   id: string;

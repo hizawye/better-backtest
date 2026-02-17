@@ -5,6 +5,9 @@ import type {
   BacktestSession,
   Bar,
   CrossSessionAnalytics,
+  DrawingEntity,
+  DrawingStyle,
+  DrawingToolType,
   JournalEntry,
   Order,
   Position,
@@ -29,6 +32,14 @@ interface TradingState {
   currentTick: Tick | null;
   bars: Bar[];
   sourceBars: Bar[];
+
+  // Chart tools
+  drawings: DrawingEntity[];
+  activeTool: DrawingToolType;
+  selectedDrawingId: string | null;
+  magnetEnabled: boolean;
+  drawingsVisible: boolean;
+  toolStylePresets: Partial<Record<Exclude<DrawingToolType, 'cursor' | 'risk_position'>, DrawingStyle>>;
 
   // Trading
   positions: Position[];
@@ -65,6 +76,23 @@ interface TradingState {
   setCurrentTick: (tick: Tick | null) => void;
   setBars: (bars: Bar[]) => void;
   setSourceBars: (bars: Bar[]) => void;
+
+  setDrawings: (drawings: DrawingEntity[]) => void;
+  addDrawing: (drawing: DrawingEntity) => void;
+  updateDrawing: (id: string, updates: Partial<DrawingEntity>) => void;
+  removeDrawing: (id: string) => void;
+  clearDrawings: () => void;
+  setActiveTool: (tool: DrawingToolType) => void;
+  setSelectedDrawing: (id: string | null) => void;
+  setMagnetEnabled: (enabled: boolean) => void;
+  setDrawingsVisible: (visible: boolean) => void;
+  setToolStylePreset: (
+    tool: Exclude<DrawingToolType, 'cursor' | 'risk_position'>,
+    style: DrawingStyle
+  ) => void;
+  setToolStylePresets: (
+    styles: Partial<Record<Exclude<DrawingToolType, 'cursor' | 'risk_position'>, DrawingStyle>>
+  ) => void;
 
   setPositions: (positions: Position[]) => void;
   addPosition: (position: Position) => void;
@@ -120,6 +148,12 @@ const store = createStore<TradingState>((set) => ({
   currentTick: null,
   bars: [],
   sourceBars: [],
+  drawings: [],
+  activeTool: 'cursor',
+  selectedDrawingId: null,
+  magnetEnabled: false,
+  drawingsVisible: true,
+  toolStylePresets: {},
 
   positions: [],
   orders: [],
@@ -169,6 +203,33 @@ const store = createStore<TradingState>((set) => ({
   setCurrentTick: (tick) => set({ currentTick: tick }),
   setBars: (bars) => set({ bars, totalBars: bars.length }),
   setSourceBars: (bars) => set({ sourceBars: bars }),
+  setDrawings: (drawings) => set({ drawings }),
+  addDrawing: (drawing) =>
+    set((state) => ({ drawings: [...state.drawings, drawing] })),
+  updateDrawing: (id, updates) =>
+    set((state) => ({
+      drawings: state.drawings.map((drawing) =>
+        drawing.id === id ? { ...drawing, ...updates } : drawing
+      )
+    })),
+  removeDrawing: (id) =>
+    set((state) => ({
+      drawings: state.drawings.filter((drawing) => drawing.id !== id),
+      selectedDrawingId: state.selectedDrawingId === id ? null : state.selectedDrawingId
+    })),
+  clearDrawings: () => set({ drawings: [], selectedDrawingId: null }),
+  setActiveTool: (activeTool) => set({ activeTool }),
+  setSelectedDrawing: (selectedDrawingId) => set({ selectedDrawingId }),
+  setMagnetEnabled: (magnetEnabled) => set({ magnetEnabled }),
+  setDrawingsVisible: (drawingsVisible) => set({ drawingsVisible }),
+  setToolStylePreset: (tool, style) =>
+    set((state) => ({
+      toolStylePresets: {
+        ...state.toolStylePresets,
+        [tool]: style
+      }
+    })),
+  setToolStylePresets: (toolStylePresets) => set({ toolStylePresets }),
 
   setPositions: (positions) => set({ positions }),
   addPosition: (position) =>
@@ -236,6 +297,12 @@ const store = createStore<TradingState>((set) => ({
       currentTick: null,
       bars: [],
       sourceBars: [],
+      drawings: [],
+      activeTool: 'cursor',
+      selectedDrawingId: null,
+      magnetEnabled: false,
+      drawingsVisible: true,
+      toolStylePresets: {},
       positions: [],
       orders: [],
       trades: [],
