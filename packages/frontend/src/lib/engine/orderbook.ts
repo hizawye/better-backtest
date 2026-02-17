@@ -23,6 +23,13 @@ export class OrderBook {
     return this.getAll().filter(o => o.status === 'pending');
   }
 
+  replaceAll(orders: Order[]): void {
+    this.orders.clear();
+    orders.forEach((order) => {
+      this.orders.set(order.id, order);
+    });
+  }
+
   updateStatus(orderId: string, status: Order['status']): void {
     const order = this.orders.get(orderId);
     if (order) {

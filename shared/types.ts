@@ -15,11 +15,19 @@ export interface Tick {
 
 export interface Order {
   id: string;
+  sessionId?: string;
   type: 'market' | 'limit' | 'stop';
   side: 'buy' | 'sell';
   size: number;
   price?: number;
   stopPrice?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  riskAmount?: number;
+  commission?: number;
+  slippage?: number;
+  cancelReason?: string;
+  triggeredAt?: number;
   status: 'pending' | 'filled' | 'cancelled';
   createdAt: number;
   filledAt?: number;
@@ -28,16 +36,22 @@ export interface Order {
 
 export interface Position {
   id: string;
+  sessionId?: string;
   side: 'buy' | 'sell';
   size: number;
   entryPrice: number;
   entryTime: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  riskAmount?: number;
+  rMultipleLive?: number;
   currentPrice?: number;
   unrealizedPnL?: number;
 }
 
 export interface Trade {
   id: string;
+  sessionId?: string;
   side: 'buy' | 'sell';
   size: number;
   entryPrice: number;
@@ -46,6 +60,81 @@ export interface Trade {
   exitTime: number;
   realizedPnL: number;
   pips: number;
+  commission?: number;
+  slippage?: number;
+  riskAmount?: number;
+  rMultiple?: number;
+  setupTags?: string[];
+}
+
+export type Timeframe = 'M1' | 'M5' | 'M15' | 'H1' | 'H4' | 'D1';
+
+export interface ExecutionConfig {
+  spread: number;
+  slippage: number;
+  commissionPerLot: number;
+}
+
+export interface BacktestConfig {
+  pair: TradingPair;
+  timeframe: Timeframe;
+  from: number;
+  to: number;
+  startingBalance: number;
+  execution: ExecutionConfig;
+}
+
+export interface BacktestSession {
+  id: string;
+  name: string;
+  config: BacktestConfig;
+  createdAt: number;
+  updatedAt: number;
+  lastReplayIndex: number;
+}
+
+export interface SessionSnapshot {
+  sessionId: string;
+  savedAt: number;
+  currentIndex: number;
+  balance: number;
+  equity: number;
+  positions: Position[];
+  orders: Order[];
+  trades: Trade[];
+}
+
+export interface JournalEntry {
+  id: string;
+  sessionId: string;
+  tradeId?: string;
+  timestamp: number;
+  setupTags: string[];
+  confidence?: number;
+  checklist?: string[];
+  notes: string;
+  reviewStatus: 'todo' | 'reviewed';
+  screenshotRefs?: string[];
+}
+
+export interface TradeReview {
+  tradeId: string;
+  sessionId: string;
+  rating?: number;
+  notes?: string;
+  reviewedAt: number;
+}
+
+export interface AnalyticsSnapshot {
+  id: string;
+  sessionId: string;
+  createdAt: number;
+  totalTrades: number;
+  winRate: number;
+  totalPnL: number;
+  expectancy: number;
+  profitFactor: number;
+  maxDrawdown: number;
 }
 
 export interface TickData {
@@ -86,4 +175,13 @@ export const PAIR_CATEGORIES: Record<TradingPair, 'forex' | 'index'> = {
   USDCHF: 'forex',
   NAS100: 'index',
   US500: 'index',
+};
+
+export const TIMEFRAME_TO_MS: Record<Timeframe, number> = {
+  M1: 60_000,
+  M5: 300_000,
+  M15: 900_000,
+  H1: 3_600_000,
+  H4: 14_400_000,
+  D1: 86_400_000
 };

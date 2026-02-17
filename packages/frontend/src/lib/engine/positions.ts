@@ -20,6 +20,13 @@ export class PositionManager {
     return Array.from(this.positions.values());
   }
 
+  replaceAll(positions: Position[]): void {
+    this.positions.clear();
+    positions.forEach((position) => {
+      this.positions.set(position.id, position);
+    });
+  }
+
   updatePrices(currentBid: number, currentAsk: number): void {
     this.positions.forEach((position, id) => {
       const updated = updatePositionPnL(position, currentBid, currentAsk);

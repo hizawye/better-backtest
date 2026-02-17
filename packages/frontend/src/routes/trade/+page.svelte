@@ -2,7 +2,19 @@
   import { onMount, onDestroy } from 'svelte';
   import { tradingStore } from '$lib/stores/trading';
   import { positionManager } from '$lib/engine/positions';
-  import { getBars, saveBars } from '$lib/db/ticks';
+  import { orderBook } from '$lib/engine/orderbook';
+  import { aggregateBarsByTimeframe } from '$lib/engine/timeframe';
+  import {
+    getBars,
+    getSessionEntities,
+    getSnapshot,
+    listSessions,
+    saveBars,
+    saveSession,
+    saveSessionEntities,
+    saveSnapshot
+  } from '$lib/db/ticks';
+  import type { BacktestSession, SessionSnapshot, Timeframe, TradingPair } from '$shared/types';
   import { PAIR_SPREADS } from '$shared/types';
   import Chart from '$lib/components/Chart.svelte';
   import OrderPanel from '$lib/components/OrderPanel.svelte';
@@ -11,26 +23,165 @@
   import ReplayControls from '$lib/components/ReplayControls.svelte';
   import '../../app.css';
 
+  const SESSION_NAME_PREFIX = 'Backtest Session';
+
+  let sessions: BacktestSession[] = [];
   $: currentPair = $tradingStore.currentPair;
+  $: currentTimeframe = $tradingStore.currentTimeframe;
+  $: rangeFrom = $tradingStore.rangeFrom;
+  $: rangeTo = $tradingStore.rangeTo;
+  $: sessionId = $tradingStore.sessionId;
+  $: sessionName = $tradingStore.sessionName;
   $: bars = $tradingStore.bars;
   $: currentBar = $tradingStore.currentBar;
   $: isPlaying = $tradingStore.isPlaying;
   $: balance = $tradingStore.balance;
+  $: orders = $tradingStore.orders;
+  $: positions = $tradingStore.positions;
+  $: trades = $tradingStore.trades;
+  $: currentIndex = $tradingStore.currentIndex;
+  $: spread = $tradingStore.spread;
 
   let worker: Worker | null = null;
   let isLoading = false;
   let errorMessage = '';
+  let isBootstrapping = true;
 
   onMount(async () => {
-    await loadData();
     initWorker();
+    await bootstrapSessions();
+    isBootstrapping = false;
   });
 
   onDestroy(() => {
+    void persistCurrentSession();
     if (worker) {
       worker.terminate();
     }
   });
+
+  async function bootstrapSessions() {
+    sessions = await listSessions();
+
+    if (sessions.length === 0) {
+      const created = createSessionDefinition();
+      await saveSession(created);
+      sessions = [created];
+    }
+
+    await loadSession(sessions[0].id);
+  }
+
+  function createSessionDefinition(): BacktestSession {
+    const now = Date.now();
+    const rangeTo = now;
+    const rangeFrom = rangeTo - 7 * 24 * 60 * 60 * 1000;
+    const defaultPair: TradingPair = 'NAS100';
+    const sessionNumber = sessions.length + 1;
+
+    return {
+      id: `session_${now}_${Math.random().toString(36).slice(2, 8)}`,
+      name: `${SESSION_NAME_PREFIX} ${sessionNumber}`,
+      createdAt: now,
+      updatedAt: now,
+      lastReplayIndex: 0,
+      config: {
+        pair: defaultPair,
+        timeframe: 'M1',
+        from: rangeFrom,
+        to: rangeTo,
+        startingBalance: 10000,
+        execution: {
+          spread: PAIR_SPREADS[defaultPair],
+          slippage: 0.3,
+          commissionPerLot: 0
+        }
+      }
+    };
+  }
+
+  async function persistCurrentSession() {
+    if (!sessionId || isBootstrapping) return;
+
+    const now = Date.now();
+    const updatedSession: BacktestSession = {
+      id: sessionId,
+      name: sessionName,
+      createdAt: sessions.find((session) => session.id === sessionId)?.createdAt ?? now,
+      updatedAt: now,
+      lastReplayIndex: currentIndex,
+      config: {
+        pair: currentPair,
+        timeframe: currentTimeframe,
+        from: rangeFrom,
+        to: rangeTo,
+        startingBalance: balance,
+        execution: {
+          spread: $tradingStore.spread,
+          slippage: $tradingStore.slippage,
+          commissionPerLot: $tradingStore.commissionPerLot
+        }
+      }
+    };
+
+    await saveSession(updatedSession);
+
+    await saveSessionEntities(sessionId, {
+      orders,
+      positions,
+      trades
+    });
+
+    const snapshot: SessionSnapshot = {
+      sessionId,
+      savedAt: now,
+      currentIndex,
+      balance,
+      equity: $tradingStore.equity,
+      orders,
+      positions,
+      trades
+    };
+    await saveSnapshot(snapshot);
+
+    sessions = await listSessions();
+  }
+
+  async function loadSession(targetSessionId: string) {
+    const session = sessions.find((item) => item.id === targetSessionId);
+    if (!session) return;
+
+    await persistCurrentSession();
+
+    tradingStore.applySession(session);
+
+    const [snapshot, entities] = await Promise.all([
+      getSnapshot(targetSessionId),
+      getSessionEntities(targetSessionId)
+    ]);
+
+    orderBook.replaceAll(entities.orders);
+    positionManager.replaceAll(entities.positions);
+    tradingStore.setOrders(entities.orders);
+    tradingStore.setPositions(entities.positions);
+    tradingStore.setTrades(entities.trades);
+
+    if (snapshot) {
+      tradingStore.setBalance(snapshot.balance);
+      tradingStore.setEquity(snapshot.equity);
+      tradingStore.setProgress(snapshot.currentIndex, $tradingStore.totalBars);
+    }
+
+    await loadData();
+  }
+
+  async function createSession() {
+    await persistCurrentSession();
+    const session = createSessionDefinition();
+    await saveSession(session);
+    sessions = await listSessions();
+    await loadSession(session.id);
+  }
 
   async function loadData() {
     isLoading = true;
@@ -38,34 +189,35 @@
 
     try {
       // Try to load from IndexedDB first
-      const now = Date.now();
-      const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+      let sourceBars = await getBars(currentPair, rangeFrom, rangeTo);
 
-      let bars = await getBars(currentPair, weekAgo, now);
-
-      if (bars.length === 0) {
+      if (sourceBars.length === 0) {
         // Fetch from API
-        const response = await fetch(`/api/data/${currentPair}/${weekAgo}/${now}`);
+        const response = await fetch(`/api/data/${currentPair}/${rangeFrom}/${rangeTo}`);
 
         if (!response.ok) {
           throw new Error(`API error: ${response.statusText}`);
         }
 
         const data = await response.json();
-        bars = data.bars;
+        sourceBars = data.bars;
 
         // Save to IndexedDB
-        await saveBars(currentPair, bars);
+        await saveBars(currentPair, sourceBars);
       }
 
-      tradingStore.setBars(bars);
+      const timeframeBars = aggregateBarsByTimeframe(sourceBars, currentTimeframe);
+
+      tradingStore.setSourceBars(sourceBars);
+      tradingStore.setBars(timeframeBars);
+      tradingStore.resetForReplay();
 
       if (worker) {
         worker.postMessage({
           type: 'init',
           payload: {
-            bars,
-            spread: PAIR_SPREADS[currentPair]
+            bars: timeframeBars,
+            spread
           }
         });
       }
@@ -94,7 +246,7 @@
         // Update positions
         positionManager.updatePrices(payload.tick.bid, payload.tick.ask);
         const positions = positionManager.getAll();
-        tradingStore.updatePositions(positions);
+        tradingStore.setPositions(positions);
 
         // Update equity
         const unrealizedPnL = positionManager.getTotalUnrealizedPnL();
@@ -126,7 +278,27 @@
   function handleReset() {
     if (!worker) return;
     worker.postMessage({ type: 'reset' });
-    tradingStore.reset();
+    tradingStore.resetForReplay();
+  }
+
+  async function handlePairChange(pair: TradingPair) {
+    tradingStore.setCurrentPair(pair);
+    tradingStore.setExecutionConfig({ spread: PAIR_SPREADS[pair] });
+    await loadData();
+  }
+
+  async function handleTimeframeChange(timeframe: Timeframe) {
+    tradingStore.setTimeframe(timeframe);
+    await loadData();
+  }
+
+  async function handleDateRangeChange(from: number, to: number) {
+    tradingStore.setDateRange(from, to);
+    await loadData();
+  }
+
+  async function handleSaveSession() {
+    await persistCurrentSession();
   }
 
   // Keyboard shortcuts
@@ -152,6 +324,14 @@
       onPlayPause={handlePlayPause}
       onSpeedChange={handleSpeedChange}
       onReset={handleReset}
+      onPairChange={handlePairChange}
+      onTimeframeChange={handleTimeframeChange}
+      onDateRangeChange={handleDateRangeChange}
+      onCreateSession={createSession}
+      onSaveSession={handleSaveSession}
+      onLoadSession={loadSession}
+      {sessions}
+      activeSessionId={sessionId}
     />
   </div>
 
