@@ -9,6 +9,10 @@
     "dev:backend": "cd packages/backend && bun run dev",
     "dev:frontend": "cd packages/frontend && npm run dev",
     "build:backend": "cd packages/backend && bun run build",
-    "build:frontend": "cd packages/frontend && npm run build"
+    "build:frontend": "cd packages/frontend && npm run build",
+    "test:frontend": "cd packages/frontend && npm run test",
+    "data:nsxusd:download": "bash scripts/histdata/download_nsxusd_m1.sh",
+    "data:nsxusd:build": "bun run scripts/histdata/build_nsxusd_dataset.ts",
+    "data:nsxusd:validate": "bun run scripts/histdata/validate_nsxusd_dataset.ts"
   }
 }

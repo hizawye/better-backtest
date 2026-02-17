@@ -10,12 +10,16 @@
     "sourceMap": true,
     "strict": true,
     "moduleResolution": "bundler",
-    "lib": ["ES2020", "DOM", "DOM.Iterable", "WebWorker"],
-    "paths": {
-      "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"],
-      "$shared/*": ["../../shared/*"]
-    }
+    "lib": ["ES2020", "DOM", "DOM.Iterable", "WebWorker"]
   },
-  "include": ["../../shared/**/*.ts"]
+  "include": [
+    "src/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte",
+    "../../shared/**/*.ts"
+  ],
+  "exclude": [
+    "src/lib/engine/__tests__/**"
+  ]
 }
