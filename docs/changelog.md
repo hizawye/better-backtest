@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.8.2] - 2026-02-17
+
+### Added
+- TradingView-style risk/reward overlay enhancements:
+  - Interactive risk handles (entry/stop/target) with live drag updates.
+  - Compact on-chart chips for target, open P&L/qty/R:R, and stop metrics.
+- New floating `PlaceOrderModal` with compact ticket UX:
+  - Risk presets, balance basis toggle, Save, and Save & Journal.
+  - Header/right-rail launchers plus keyboard shortcut (`P`).
+- Shared order form controller module for reusable sizing/validation math across rail and modal surfaces.
+
+### Changed
+- Trade workspace visual language shifted to a modern minimalist dashboard style:
+  - Lower border density and softer surface contrast.
+  - Icon-first controls in header/toolbar/rail.
+  - Compact spacing and subtle-fast transitions.
+- Journal flow now supports contextual prefill after Save & Journal submission.
+
+## [0.8.1] - 2026-02-17
+
+### Fixed
+- Trade page vertical resize runaway that could freeze desktop browsers during layout/resize churn.
+
+### Added
+- Chart resize guard utility:
+  - Dimension normalization to stable integer pixels.
+  - Resize no-op dedupe for unchanged dimensions.
+- Regression tests for chart resize guard behavior.
+
+### Changed
+- Trade page chart area now uses a bounded `chart-host` container so warning banners and chart sizing cannot over-expand layout.
+- Frontend layout containers (`app/main/chart/panel`) now apply shrink-safe constraints (`min-height: 0`, `minmax(0, ...)`, bounded overflow).
+- Chart resize handling now coalesces ResizeObserver events with `requestAnimationFrame` and applies only meaningful size changes.
+
 ## [0.3.0] - 2026-02-17
 
 ### Added

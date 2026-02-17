@@ -242,3 +242,130 @@
 **Rationale**:
 - Prevents false-negative build checks due to test-only runtime modules (`bun:test`).
 - Keeps production `svelte-check` output signal clean for release gating.
+
+---
+
+## 2026-02-17 - Trade Page Vertical Freeze Hardening
+
+**Decision**: Move chart into a dedicated bounded flex host under the warning banner
+**Rationale**:
+- Warning/banner UI and `height: 100%` chart siblings can over-constrain layout and trigger repeated resize churn.
+- A dedicated `chart-host` (`flex: 1; min-height: 0`) guarantees bounded chart height independent of banner visibility.
+
+**Decision**: Add global shrink-safe grid/flex constraints for trade layout containers
+**Rationale**:
+- `min-height: 0`/`minmax(0, ...)` are required in nested grid/flex layouts to prevent min-content expansion loops.
+- Explicit overflow boundaries keep panel/chart internals from forcing parent growth.
+
+**Decision**: Replace raw ResizeObserver -> applyOptions loop with deduped, RAF-coalesced resize updates
+**Rationale**:
+- Reapplying identical dimensions from ResizeObserver can create feedback loops and browser stalls.
+- Flooring dimensions + no-op dedupe + single-frame coalescing makes resize behavior deterministic and loop-resistant.
+
+---
+
+## 2026-02-17 - Replay Controls Select Event Correctness
+
+**Decision**: Read select values from `change` event targets instead of relying on `bind:value` state inside the same handler.
+**Rationale**:
+- In Svelte, `on:change` handlers can observe pre-bind values, which caused stale timeframe/pair/speed/session values to be submitted.
+- Direct event-target reads make control changes deterministic and remove one-step-lag/revert behavior in timeframe switching.
+
+---
+
+## 2026-02-17 - Terminal-Style Trade UI Overhaul
+
+**Decision**: Redesign trade screen around a dense terminal workspace (clustered top toolbar, chart shell header, right rail ticket, tabbed bottom dock).
+**Rationale**:
+- Existing UI lacked hierarchy and density expected in discretionary backtesting workflows.
+- FXReplay/TradingView-inspired interaction structure improves readability, control discoverability, and screen efficiency.
+
+**Decision**: Introduce a stronger design token system with dedicated surface tiers and typography (`IBM Plex Sans/Mono`) while keeping existing runtime logic unchanged.
+**Rationale**:
+- Consistent tokens are required to scale panel styling and state colors without ad-hoc CSS drift.
+- Monospace numeric typography materially improves quote/time/metric scanning in trading UIs.
+
+---
+
+## 2026-02-17 - UI Parity Second Pass (Workspace + Dock Content)
+
+**Decision**: Add explicit chart workspace chrome (platform strip, tool rail, OHLC telemetry row, chart footer status) while keeping replay/execution behavior untouched.
+**Rationale**:
+- The first visual pass improved shell structure but still lacked recognizable chart-workspace affordances from FXReplay/TradingView.
+- A dedicated chrome layer improves scanability and perceived product maturity without changing trade logic or data flow.
+
+**Decision**: Bring all dock content tabs onto the same terminal design system instead of mixing redesigned shell with legacy table/form styles.
+**Rationale**:
+- Mixed-era styling made the interface feel inconsistent even when core shell looked improved.
+- Unified panel styling (headers, pills, table density, cards) creates a coherent UX and better visual hierarchy for trading workflows.
+
+---
+
+## 2026-02-17 - Trade UI De-Bento Refinement
+
+**Decision**: Remove non-functional visual chrome (top platform strip and left chart tool rail) and keep only controls wired to trading/replay behavior.
+**Rationale**:
+- Decorative controls reduced trust and made the workspace feel like a mockup instead of a trading terminal.
+- A stricter functional hierarchy better matches TradingView/FxReplay expectations for production workflows.
+
+**Decision**: Flatten right rail and analytics/metrics layouts from card-grid presentation into table-like terminal sections.
+**Rationale**:
+- Card-heavy composition created the "bento box" look and wasted vertical space.
+- Flat rows and section dividers improve scan speed for risk, order, and performance data.
+
+---
+
+## 2026-02-17 - Codex TradingView MCP Integration
+
+**Decision**: Use `atilaahmettaner/tradingview-mcp` as the default TradingView data/tool connector for Codex MCP.
+**Rationale**:
+- Provides a practical initial tool surface for market screening and technical-analysis queries (`top_gainers`, `top_losers`, Bollinger/candle scans, per-symbol analysis).
+- Works as a zero-code integration path by launching directly from Git via `uv tool run`.
+
+**Decision**: Register MCP with an absolute `uv` binary path in Codex config (`/home/nagara/.local/bin/uv`).
+**Rationale**:
+- Avoids shell PATH drift between interactive shells and Codex runtime.
+- Keeps MCP server startup deterministic across sessions.
+
+---
+
+## 2026-02-17 - Session-Scoped Workspace Persistence + TV-Style Shell
+
+**Decision**: Persist trade workspace UI layout as first-class session data (`watchlistVisible`, right/bottom drawer state+tab, `compactToolbar`) using Dexie `workspacePrefs`.
+**Rationale**:
+- Backtesting workflows need stable panel context between sessions, not just order/position/trade state.
+- Preserving panel layout removes friction when switching between scenario sessions.
+
+**Decision**: Move risk entry controls from chart-local overlay region into a dedicated right drawer risk context.
+**Rationale**:
+- Keeps chart viewport visually clean and focused on price action/drawing interactions.
+- Aligns with TradingView-like contextual side panels and improves discoverability of risk workflow controls.
+
+**Decision**: Restructure trade page into three-zone workspace (watchlist rail, chart core, contextual right drawer) plus a collapsible bottom results drawer.
+**Rationale**:
+- Reduces border-heavy block layout and improves visual hierarchy for fast scan/use.
+- Makes navigation and tool access more predictable for active replay/backtesting loops.
+
+---
+
+## 2026-02-17 - Risk Overlay Parity + Modal/Rail Order Form Unification
+
+**Decision**: Add TradingView-style interactive risk overlay primitives directly in `Chart.svelte` and keep `+page.svelte` as the source of truth via patch callbacks (`onRiskDraftAdjust`).
+**Rationale**:
+- Preserves current backtest engine semantics while enabling responsive drag interactions and live metric chips.
+- Prevents chart-local state drift by routing drag mutations through the page/store layer.
+
+**Decision**: Extract shared order math/validation into `order-form-controller.ts` and consume it from both `OrderPanel` and `PlaceOrderModal`.
+**Rationale**:
+- Removes duplicated business rules and prevents rail/modal behavior divergence.
+- Keeps sizing/risk/tick precision logic consistent with existing execution pathways.
+
+**Decision**: Implement dual-surface order UX (right rail quick edit + floating full ticket modal) and make Save & Journal populate journal context.
+**Rationale**:
+- Supports both fast iteration and detailed order authoring without hiding existing rail workflows.
+- Reduces post-trade journaling friction by auto-seeding context from the submitted order.
+
+**Decision**: Shift trade shell toward icon-first minimalist density with lower border contrast and subtle-fast motion timings.
+**Rationale**:
+- Addresses previous feedback about heavy borders/text and lifeless visuals.
+- Improves scan speed and interaction feel while keeping chart performance priorities intact.
