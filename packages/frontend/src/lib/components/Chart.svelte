@@ -184,13 +184,14 @@
     if (!draftTool || draftPoints.length === 0 || !onCreateDrawing) return;
     const pointRequirement = requiredPointCount(draftTool);
     if (draftPoints.length < pointRequirement) return;
+    const points = draftTool === 'brush' ? [...draftPoints] : draftPoints.slice(0, pointRequirement);
 
     onCreateDrawing({
       id: generateDrawingId(),
       sessionId,
       pair: pair as DrawingEntity['pair'],
       tool: draftTool,
-      points: draftPoints.slice(0, pointRequirement),
+      points,
       style: createDefaultDrawingStyle(draftTool),
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -217,6 +218,12 @@
 
   function startDrawingMode(anchor: DrawingPoint) {
     if (!isDrawingTool(activeTool)) return;
+
+    if (activeTool === 'brush') {
+      draftTool = activeTool;
+      draftPoints = [anchor];
+      return;
+    }
 
     if (!draftTool || draftTool !== activeTool) {
       draftTool = activeTool;
@@ -288,6 +295,20 @@
 
   function updateDraftPreview(anchor: DrawingPoint) {
     if (!draftTool) return;
+    if (draftTool === 'brush') {
+      const lastPoint = draftPoints[draftPoints.length - 1];
+      if (!lastPoint) {
+        draftPoints = [anchor];
+        return;
+      }
+      const timestampDistance = Math.abs(anchor.timestamp - lastPoint.timestamp);
+      const priceDistance = Math.abs(anchor.price - lastPoint.price);
+      if (timestampDistance >= 20_000 || priceDistance >= 0.08) {
+        draftPoints = [...draftPoints, anchor];
+      }
+      return;
+    }
+
     if (requiredPointCount(draftTool) <= 1) return;
     if (draftPoints.length === 1) {
       draftPoints = [draftPoints[0], anchor];
@@ -384,6 +405,9 @@
   }
 
   function handleOverlayPointerUp() {
+    if (draftTool === 'brush' && draftPoints.length > 1) {
+      commitDrawingFromDraft();
+    }
     isPointerDown = false;
     dragContext = null;
   }

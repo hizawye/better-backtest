@@ -7,6 +7,10 @@
   import { evaluateStopsOnBar, tryFillOrderOnBar } from '$lib/engine/execution';
   import { closePosition } from '$lib/engine/pnl';
   import {
+    createDefaultDrawingStyle,
+    isDrawingTool
+  } from '$lib/engine/chart-tools';
+  import {
     getDrawings,
     getSessionEvents,
     getSessionEntities,
@@ -29,6 +33,7 @@
     BacktestSession,
     Bar,
     DrawingEntity,
+    DrawingStyle,
     DrawingToolType,
     SessionEvent,
     SessionSnapshot,
@@ -83,6 +88,10 @@
   $: magnetEnabled = $tradingStore.magnetEnabled;
   $: drawingsVisible = $tradingStore.drawingsVisible;
   $: toolStylePresets = $tradingStore.toolStylePresets;
+  $: selectedDrawing = selectedDrawingId
+    ? drawings.find((drawing) => drawing.id === selectedDrawingId) ?? null
+    : null;
+  $: styleEditor = resolveStyleEditorState(selectedDrawing, activeTool);
   $: analyticsSnapshot = $tradingStore.analyticsSnapshot;
   $: crossSessionAnalytics = $tradingStore.crossSessionAnalytics;
   $: chartViewKey = `${currentPair}_${currentTimeframe}_${rangeFrom}_${rangeTo}`;
@@ -105,10 +114,14 @@
     { id: 'trend_line', label: 'Trend' },
     { id: 'horizontal_line', label: 'HLine' },
     { id: 'vertical_line', label: 'VLine' },
+    { id: 'ray', label: 'Ray' },
+    { id: 'extended_line', label: 'Ext' },
     { id: 'rectangle', label: 'Rect' },
     { id: 'text', label: 'Text' },
     { id: 'arrow', label: 'Arrow' },
-    { id: 'ruler', label: 'Ruler' }
+    { id: 'ruler', label: 'Ruler' },
+    { id: 'fibonacci', label: 'Fib' },
+    { id: 'brush', label: 'Brush' }
   ];
 
   const dockTabs: Array<{ id: DockTab; label: string }> = [
@@ -236,6 +249,7 @@
       sessionId,
       pair: currentPair,
       style: toolStyle ? { ...toolStyle } : input.style,
+      text: input.tool === 'text' ? input.text || 'Note' : input.text,
       updatedAt: Date.now()
     };
   }
@@ -260,6 +274,87 @@
     tradingStore.removeDrawing(drawingId);
     appendSessionEvent('drawing_deleted', { drawingId, tool: drawing.tool });
     queueDrawingPersist();
+  }
+
+  function resolveStyleEditorState(
+    drawing: DrawingEntity | null,
+    tool: DrawingToolType
+  ): DrawingStyle {
+    if (drawing) {
+      return drawing.style;
+    }
+
+    if (isDrawingTool(tool)) {
+      return toolStylePresets[tool] ?? createDefaultDrawingStyle(tool);
+    }
+
+    return createDefaultDrawingStyle('trend_line');
+  }
+
+  function applyStyleChange(partial: Partial<DrawingStyle>) {
+    if (selectedDrawing) {
+      handleUpdateDrawing({
+        ...selectedDrawing,
+        style: {
+          ...selectedDrawing.style,
+          ...partial
+        }
+      });
+    }
+
+    const targetTool = selectedDrawing?.tool ?? (isDrawingTool(activeTool) ? activeTool : null);
+    if (!targetTool) return;
+
+    const currentStyle = toolStylePresets[targetTool] ?? createDefaultDrawingStyle(targetTool);
+    tradingStore.setToolStylePreset(targetTool, {
+      ...currentStyle,
+      ...partial
+    });
+    void persistToolPrefs();
+  }
+
+  function duplicateSelectedDrawing() {
+    if (!selectedDrawing) return;
+    const now = Date.now();
+    const duplicate: DrawingEntity = {
+      ...selectedDrawing,
+      id: `draw_${now}_${Math.random().toString(36).slice(2, 8)}`,
+      points: selectedDrawing.points.map((point) => ({ ...point })),
+      createdAt: now,
+      updatedAt: now,
+      zIndex: now
+    };
+    tradingStore.addDrawing(duplicate);
+    tradingStore.setSelectedDrawing(duplicate.id);
+    appendSessionEvent('drawing_created', { drawingId: duplicate.id, tool: duplicate.tool, source: selectedDrawing.id });
+    queueDrawingPersist();
+  }
+
+  function toggleSelectedDrawingLock() {
+    if (!selectedDrawing) return;
+    handleUpdateDrawing({
+      ...selectedDrawing,
+      locked: !selectedDrawing.locked
+    });
+  }
+
+  function toggleSelectedDrawingHidden() {
+    if (!selectedDrawing) return;
+    handleUpdateDrawing({
+      ...selectedDrawing,
+      hidden: !selectedDrawing.hidden
+    });
+  }
+
+  function moveSelectedDrawing(direction: 'front' | 'back') {
+    if (!selectedDrawing) return;
+    const zValues = drawings.map((drawing) => drawing.zIndex ?? 0);
+    const maxZ = zValues.length > 0 ? Math.max(...zValues) : Date.now();
+    const minZ = zValues.length > 0 ? Math.min(...zValues) : Date.now();
+    handleUpdateDrawing({
+      ...selectedDrawing,
+      zIndex: direction === 'front' ? maxZ + 1 : minZ - 1
+    });
   }
 
   onMount(async () => {
@@ -930,6 +1025,83 @@
                 >
                   Clear
                 </button>
+
+                <div class="tool-divider"></div>
+                <button class="tool-btn mono" on:click={duplicateSelectedDrawing} disabled={!selectedDrawing}>
+                  Duplicate
+                </button>
+                <button class="tool-btn mono" on:click={toggleSelectedDrawingLock} disabled={!selectedDrawing}>
+                  {selectedDrawing?.locked ? 'Unlock' : 'Lock'}
+                </button>
+                <button class="tool-btn mono" on:click={toggleSelectedDrawingHidden} disabled={!selectedDrawing}>
+                  {selectedDrawing?.hidden ? 'Unhide' : 'Hide'}
+                </button>
+                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('front')} disabled={!selectedDrawing}>
+                  Front
+                </button>
+                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('back')} disabled={!selectedDrawing}>
+                  Back
+                </button>
+
+                <div class="tool-divider"></div>
+                <label class="style-label">
+                  <span>Color</span>
+                  <input
+                    type="color"
+                    value={styleEditor.color}
+                    on:input={(event) => applyStyleChange({ color: (event.currentTarget as HTMLInputElement).value })}
+                  />
+                </label>
+                <label class="style-label">
+                  <span>Width</span>
+                  <select
+                    value={String(styleEditor.lineWidth)}
+                    on:change={(event) =>
+                      applyStyleChange({ lineWidth: Number((event.currentTarget as HTMLSelectElement).value) })}
+                  >
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                  </select>
+                </label>
+                <label class="style-label">
+                  <span>Line</span>
+                  <select
+                    value={styleEditor.lineStyle}
+                    on:change={(event) =>
+                      applyStyleChange({ lineStyle: (event.currentTarget as HTMLSelectElement).value as DrawingStyle['lineStyle'] })}
+                  >
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                  </select>
+                </label>
+                <label class="style-label">
+                  <span>Fill</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="0.9"
+                    step="0.05"
+                    value={String(styleEditor.fillOpacity ?? 0.12)}
+                    on:input={(event) =>
+                      applyStyleChange({ fillOpacity: Number((event.currentTarget as HTMLInputElement).value) })}
+                  />
+                </label>
+                <label class="style-label">
+                  <span>Text</span>
+                  <input
+                    type="number"
+                    min="9"
+                    max="28"
+                    step="1"
+                    value={String(styleEditor.textSize ?? 12)}
+                    on:change={(event) =>
+                      applyStyleChange({ textSize: Number((event.currentTarget as HTMLInputElement).value) })}
+                  />
+                </label>
               </aside>
 
               {#key chartViewKey}
@@ -1265,6 +1437,37 @@
     cursor: not-allowed;
   }
 
+  .tool-divider {
+    border-top: 1px solid rgba(51, 65, 85, 0.65);
+    margin: 4px 0;
+  }
+
+  .style-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 9px;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+  }
+
+  .style-label input,
+  .style-label select {
+    width: 100%;
+    border: 1px solid rgba(51, 65, 85, 0.65);
+    background: #101a28;
+    color: #d8e4f7;
+    font-size: 10px;
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .style-label input[type='color'] {
+    min-height: 28px;
+    padding: 2px;
+  }
+
   .chart-footer {
     display: flex;
     align-items: center;
@@ -1426,6 +1629,19 @@
 
     .tool-btn {
       min-width: 62px;
+    }
+
+    .tool-divider {
+      width: 1px;
+      min-height: 32px;
+      border-top: 0;
+      border-left: 1px solid rgba(51, 65, 85, 0.65);
+      margin: 0 4px;
+    }
+
+    .style-label {
+      min-width: 90px;
+      flex: 0 0 auto;
     }
   }
 </style>
