@@ -1,12 +1,15 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
+  Attachment,
   AnalyticsSnapshot,
   BacktestSession,
   Bar,
   JournalEntry,
   Order,
   Position,
+  SessionEvent,
   SessionSnapshot,
+  Timeframe,
   Trade
 } from '$shared/types';
 
@@ -32,14 +35,22 @@ interface SessionRecord extends BacktestSession {
   commissionPerLot: number;
 }
 
+interface AggregatedBarRecord extends BarRecord {
+  sessionId: string;
+  timeframe: Timeframe;
+}
+
 const db = new Dexie('BetterBacktest') as Dexie & {
   bars: EntityTable<BarRecord, 'id'>;
+  aggregatedBars: EntityTable<AggregatedBarRecord, 'id'>;
   sessions: EntityTable<SessionRecord, 'id'>;
   snapshots: EntityTable<SessionSnapshot, 'sessionId'>;
   orders: EntityTable<Order, 'id'>;
   positions: EntityTable<Position, 'id'>;
   trades: EntityTable<Trade, 'id'>;
+  sessionEvents: EntityTable<SessionEvent, 'id'>;
   journalEntries: EntityTable<JournalEntry, 'id'>;
+  attachments: EntityTable<Attachment, 'id'>;
   analyticsSnapshots: EntityTable<AnalyticsSnapshot, 'id'>;
 };
 
@@ -55,6 +66,20 @@ db.version(2).stores({
   positions: 'id, sessionId, entryTime',
   trades: 'id, sessionId, exitTime',
   journalEntries: 'id, sessionId, timestamp, reviewStatus',
+  analyticsSnapshots: 'id, sessionId, createdAt'
+});
+
+db.version(3).stores({
+  bars: 'id, pair, timestamp',
+  aggregatedBars: 'id, sessionId, pair, timeframe, timestamp',
+  sessions: 'id, updatedAt, pair, timeframe, from, to',
+  snapshots: 'sessionId, savedAt',
+  orders: 'id, sessionId, status, createdAt',
+  positions: 'id, sessionId, entryTime',
+  trades: 'id, sessionId, exitTime',
+  sessionEvents: 'id, sessionId, sequence, timestamp, type',
+  journalEntries: 'id, sessionId, timestamp, reviewStatus',
+  attachments: 'id, sessionId, journalEntryId, createdAt',
   analyticsSnapshots: 'id, sessionId, createdAt'
 });
 
@@ -88,6 +113,53 @@ export async function clearBars(pair?: string): Promise<void> {
   } else {
     await db.bars.clear();
   }
+}
+
+export async function saveAggregatedBars(
+  sessionId: string,
+  pair: string,
+  timeframe: Timeframe,
+  bars: Bar[]
+): Promise<void> {
+  const records: AggregatedBarRecord[] = bars.map((bar) => ({
+    id: `${sessionId}_${pair}_${timeframe}_${bar.timestamp}`,
+    sessionId,
+    pair,
+    timeframe,
+    timestamp: bar.timestamp,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume
+  }));
+  await db.aggregatedBars.bulkPut(records);
+}
+
+export async function getAggregatedBars(
+  sessionId: string,
+  pair: string,
+  timeframe: Timeframe,
+  from: number,
+  to: number
+): Promise<Bar[]> {
+  const records = await db.aggregatedBars
+    .where('sessionId')
+    .equals(sessionId)
+    .and(
+      (bar) =>
+        bar.pair === pair &&
+        bar.timeframe === timeframe &&
+        bar.timestamp >= from &&
+        bar.timestamp <= to
+    )
+    .toArray();
+
+  return records.map(({ id, sessionId: _sessionId, pair: _pair, timeframe: _timeframe, ...bar }) => bar);
+}
+
+export async function clearAggregatedBars(sessionId: string): Promise<void> {
+  await db.aggregatedBars.where('sessionId').equals(sessionId).delete();
 }
 
 function toRecord(session: BacktestSession): SessionRecord {
@@ -188,6 +260,23 @@ export async function getSessionEntities(sessionId: string): Promise<{
   return { orders, positions, trades };
 }
 
+export async function saveSessionEvents(sessionId: string, events: SessionEvent[]): Promise<void> {
+  await db.transaction('rw', db.sessionEvents, async () => {
+    await db.sessionEvents.where('sessionId').equals(sessionId).delete();
+    if (events.length > 0) {
+      await db.sessionEvents.bulkPut(events.map((event) => ({ ...event, sessionId })));
+    }
+  });
+}
+
+export async function appendSessionEvent(event: SessionEvent): Promise<void> {
+  await db.sessionEvents.put(event);
+}
+
+export async function getSessionEvents(sessionId: string): Promise<SessionEvent[]> {
+  return db.sessionEvents.where('sessionId').equals(sessionId).sortBy('sequence');
+}
+
 export async function saveJournalEntry(entry: JournalEntry): Promise<void> {
   await db.journalEntries.put(entry);
 }
@@ -198,6 +287,18 @@ export async function getJournalEntries(sessionId: string): Promise<JournalEntry
 
 export async function saveAnalyticsSnapshot(snapshot: AnalyticsSnapshot): Promise<void> {
   await db.analyticsSnapshots.put(snapshot);
+}
+
+export async function saveAttachment(attachment: Attachment): Promise<void> {
+  await db.attachments.put(attachment);
+}
+
+export async function getAttachmentsForJournal(journalEntryId: string): Promise<Attachment[]> {
+  return db.attachments.where('journalEntryId').equals(journalEntryId).toArray();
+}
+
+export async function getAttachmentsForSession(sessionId: string): Promise<Attachment[]> {
+  return db.attachments.where('sessionId').equals(sessionId).toArray();
 }
 
 export { db };

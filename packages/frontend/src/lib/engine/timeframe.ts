@@ -1,5 +1,13 @@
 import type { Bar, Timeframe } from '$shared/types';
-import { TIMEFRAME_TO_MS } from '$shared/types';
+
+const TIMEFRAME_TO_MS: Record<Timeframe, number> = {
+  M1: 60_000,
+  M5: 300_000,
+  M15: 900_000,
+  H1: 3_600_000,
+  H4: 14_400_000,
+  D1: 86_400_000
+};
 
 function bucketStart(timestamp: number, bucketMs: number): number {
   return Math.floor(timestamp / bucketMs) * bucketMs;

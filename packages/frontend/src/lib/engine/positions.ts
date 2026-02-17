@@ -16,6 +16,14 @@ export class PositionManager {
     return this.positions.get(positionId);
   }
 
+  update(positionId: string, updates: Partial<Position>): Position | null {
+    const current = this.positions.get(positionId);
+    if (!current) return null;
+    const next = { ...current, ...updates };
+    this.positions.set(positionId, next);
+    return next;
+  }
+
   getAll(): Position[] {
     return Array.from(this.positions.values());
   }

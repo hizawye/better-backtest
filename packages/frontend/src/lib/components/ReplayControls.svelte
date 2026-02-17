@@ -20,6 +20,7 @@
   export let onTimeframeChange: (timeframe: Timeframe) => void;
   export let onDateRangeChange: (from: number, to: number) => void;
   export let onCreateSession: () => void;
+  export let onDuplicateSession: () => void;
   export let onSaveSession: () => void;
   export let onLoadSession: (sessionId: string) => void;
   export let sessions: BacktestSession[] = [];
@@ -85,6 +86,7 @@
       {/each}
     </select>
     <button class="btn" on:click={onCreateSession} title="Create new session">New</button>
+    <button class="btn" on:click={onDuplicateSession} title="Duplicate current session">Duplicate</button>
     <button class="btn" on:click={onSaveSession} title="Save current session">Save</button>
   </div>
 

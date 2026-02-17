@@ -28,6 +28,8 @@ export interface Order {
   slippage?: number;
   cancelReason?: string;
   triggeredAt?: number;
+  amendedAt?: number;
+  cancelledAt?: number;
   status: 'pending' | 'filled' | 'cancelled';
   createdAt: number;
   filledAt?: number;
@@ -65,6 +67,9 @@ export interface Trade {
   riskAmount?: number;
   rMultiple?: number;
   setupTags?: string[];
+  closeReason?: 'manual' | 'stop_loss' | 'take_profit' | 'close_all' | 'partial_close';
+  mae?: number;
+  mfe?: number;
 }
 
 export type Timeframe = 'M1' | 'M5' | 'M15' | 'H1' | 'H4' | 'D1';
@@ -104,6 +109,30 @@ export interface SessionSnapshot {
   trades: Trade[];
 }
 
+export type SessionEventType =
+  | 'order_placed'
+  | 'order_amended'
+  | 'order_cancelled'
+  | 'order_filled'
+  | 'position_opened'
+  | 'position_closed'
+  | 'position_partially_closed'
+  | 'journal_entry_added'
+  | 'analytics_updated'
+  | 'replay_seek'
+  | 'timeframe_changed'
+  | 'session_loaded'
+  | 'session_saved';
+
+export interface SessionEvent {
+  id: string;
+  sessionId: string;
+  sequence: number;
+  type: SessionEventType;
+  timestamp: number;
+  payload?: Record<string, unknown>;
+}
+
 export interface JournalEntry {
   id: string;
   sessionId: string;
@@ -115,6 +144,17 @@ export interface JournalEntry {
   notes: string;
   reviewStatus: 'todo' | 'reviewed';
   screenshotRefs?: string[];
+}
+
+export interface Attachment {
+  id: string;
+  sessionId: string;
+  journalEntryId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: number;
+  blob?: Blob;
 }
 
 export interface TradeReview {
@@ -135,6 +175,18 @@ export interface AnalyticsSnapshot {
   expectancy: number;
   profitFactor: number;
   maxDrawdown: number;
+  averageWin: number;
+  averageLoss: number;
+  bestStreak: number;
+  worstStreak: number;
+  averageRMultiple: number;
+  medianRMultiple: number;
+  bySetupTag: Record<string, { trades: number; pnl: number; winRate: number }>;
+  byHour: Record<string, { trades: number; pnl: number; winRate: number }>;
+  byDayOfWeek: Record<string, { trades: number; pnl: number; winRate: number }>;
+  equityCurve: Array<{ timestamp: number; value: number }>;
+  drawdownCurve: Array<{ timestamp: number; value: number }>;
+  rDistribution: Array<{ bucket: string; count: number }>;
 }
 
 export interface TickData {

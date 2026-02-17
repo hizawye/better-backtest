@@ -37,6 +37,19 @@ export class OrderBook {
     }
   }
 
+  amend(orderId: string, updates: Partial<Order>, timestamp: number): Order | null {
+    const order = this.orders.get(orderId);
+    if (!order || order.status !== 'pending') return null;
+
+    const amended: Order = {
+      ...order,
+      ...updates,
+      amendedAt: timestamp
+    };
+    this.orders.set(orderId, amended);
+    return amended;
+  }
+
   fill(orderId: string, filledPrice: number, timestamp: number): void {
     const order = this.orders.get(orderId);
     if (order) {
@@ -44,6 +57,20 @@ export class OrderBook {
       order.filledPrice = filledPrice;
       order.filledAt = timestamp;
     }
+  }
+
+  cancel(orderId: string, reason: string, timestamp: number): Order | null {
+    const order = this.orders.get(orderId);
+    if (!order || order.status !== 'pending') return null;
+
+    const cancelled: Order = {
+      ...order,
+      status: 'cancelled',
+      cancelReason: reason,
+      cancelledAt: timestamp
+    };
+    this.orders.set(orderId, cancelled);
+    return cancelled;
   }
 
   clear(): void {

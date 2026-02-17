@@ -7,6 +7,7 @@ import type {
   JournalEntry,
   Order,
   Position,
+  SessionEvent,
   Tick,
   Timeframe,
   Trade,
@@ -33,9 +34,12 @@ interface TradingState {
   orders: Order[];
   trades: Trade[];
   journalEntries: JournalEntry[];
+  sessionEvents: SessionEvent[];
   analyticsSnapshot: AnalyticsSnapshot | null;
   balance: number;
   equity: number;
+  peakEquity: number;
+  maxDrawdown: number;
 
   // Costs and execution assumptions
   spread: number;
@@ -74,6 +78,8 @@ interface TradingState {
 
   setJournalEntries: (entries: JournalEntry[]) => void;
   addJournalEntry: (entry: JournalEntry) => void;
+  setSessionEvents: (events: SessionEvent[]) => void;
+  addSessionEvent: (event: SessionEvent) => void;
   setAnalyticsSnapshot: (snapshot: AnalyticsSnapshot | null) => void;
 
   setPlaying: (playing: boolean) => void;
@@ -116,9 +122,12 @@ const store = createStore<TradingState>((set) => ({
   orders: [],
   trades: [],
   journalEntries: [],
+  sessionEvents: [],
   analyticsSnapshot: null,
   balance: 10000,
   equity: 10000,
+  peakEquity: 10000,
+  maxDrawdown: 0,
 
   spread: 2,
   slippage: 0.3,
@@ -139,6 +148,8 @@ const store = createStore<TradingState>((set) => ({
       rangeTo: session.config.to,
       balance: session.config.startingBalance,
       equity: session.config.startingBalance,
+      peakEquity: session.config.startingBalance,
+      maxDrawdown: 0,
       spread: session.config.execution.spread,
       slippage: session.config.execution.slippage,
       commissionPerLot: session.config.execution.commissionPerLot,
@@ -178,6 +189,9 @@ const store = createStore<TradingState>((set) => ({
   setJournalEntries: (journalEntries) => set({ journalEntries }),
   addJournalEntry: (entry) =>
     set((state) => ({ journalEntries: [...state.journalEntries, entry] })),
+  setSessionEvents: (sessionEvents) => set({ sessionEvents }),
+  addSessionEvent: (event) =>
+    set((state) => ({ sessionEvents: [...state.sessionEvents, event] })),
   setAnalyticsSnapshot: (analyticsSnapshot) => set({ analyticsSnapshot }),
 
   setPlaying: (playing) => set({ isPlaying: playing }),
@@ -187,7 +201,13 @@ const store = createStore<TradingState>((set) => ({
   setBalance: (balance) => set({ balance }),
   updateBalance: (amount) => set((state) => ({ balance: state.balance + amount })),
   setEquity: (equity) => set({ equity }),
-  updateEquity: (equity) => set({ equity }),
+  updateEquity: (equity) =>
+    set((state) => {
+      const peakEquity = Math.max(state.peakEquity, equity);
+      const drawdown = peakEquity - equity;
+      const maxDrawdown = Math.max(state.maxDrawdown, drawdown);
+      return { equity, peakEquity, maxDrawdown };
+    }),
 
   setExecutionConfig: (config) =>
     set((state) => ({
@@ -215,9 +235,12 @@ const store = createStore<TradingState>((set) => ({
       orders: [],
       trades: [],
       journalEntries: [],
+      sessionEvents: [],
       analyticsSnapshot: null,
       balance: 10000,
       equity: 10000,
+      peakEquity: 10000,
+      maxDrawdown: 0,
       isPlaying: false,
       speed: 1,
       currentIndex: 0,
