@@ -1,7 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { createChart, type IChartApi, type ISeriesApi } from 'lightweight-charts';
-  import type { Bar, DrawingEntity, DrawingPoint, DrawingToolType, Position, Timeframe } from '$shared/types';
+  import type {
+    Bar,
+    DrawingEntity,
+    DrawingPoint,
+    DrawingToolType,
+    Position,
+    RiskToolDraft,
+    Timeframe
+  } from '$shared/types';
   import {
     createDefaultDrawingStyle,
     getLineDash,
@@ -29,6 +37,8 @@
   export let magnetEnabled = false;
   export let drawingsVisible = true;
   export let positions: Position[] = [];
+  export let riskDraft: RiskToolDraft | null = null;
+  export let riskDraftSeed: DrawingPoint | null = null;
 
   export let onCreateDrawing: ((drawing: DrawingEntity) => void) | undefined = undefined;
   export let onUpdateDrawing: ((drawing: DrawingEntity) => void) | undefined = undefined;
@@ -739,6 +749,33 @@
       {/if}
     {/if}
 
+    {#if riskDraftSeed}
+      {@const seedScreen = pointToScreen(riskDraftSeed)}
+      {#if seedScreen}
+        <circle cx={seedScreen.x} cy={seedScreen.y} r="5" class="risk-seed" />
+      {/if}
+    {/if}
+
+    {#if riskDraft}
+      {@const entryScreen = pointToScreen(riskDraft.entry)}
+      {@const stopScreen = pointToScreen(riskDraft.stop)}
+      {#if entryScreen && stopScreen}
+        {@const top = Math.min(entryScreen.y, stopScreen.y)}
+        {@const height = Math.max(Math.abs(entryScreen.y - stopScreen.y), 1)}
+        <rect
+          x="0"
+          y={top}
+          width={overlayWidth}
+          height={height}
+          class:risk-buy={riskDraft.side === 'buy'}
+          class:risk-sell={riskDraft.side === 'sell'}
+          class="risk-box"
+        />
+        <line x1="0" x2={overlayWidth} y1={entryScreen.y} y2={entryScreen.y} class="risk-entry" />
+        <line x1="0" x2={overlayWidth} y1={stopScreen.y} y2={stopScreen.y} class="risk-stop" />
+      {/if}
+    {/if}
+
     <defs>
       <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto">
         <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
@@ -861,5 +898,36 @@
 
   .position-level.take {
     stroke: #22c55e;
+  }
+
+  .risk-seed {
+    fill: #f8fafc;
+    stroke: #f59e0b;
+    stroke-width: 2;
+  }
+
+  .risk-box {
+    fill-opacity: 0.2;
+    stroke: none;
+  }
+
+  .risk-box.risk-buy {
+    fill: #22c55e;
+  }
+
+  .risk-box.risk-sell {
+    fill: #ef4444;
+  }
+
+  .risk-entry {
+    stroke: #93c5fd;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+  }
+
+  .risk-stop {
+    stroke: #ef4444;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
   }
 </style>

@@ -4,12 +4,24 @@
   import { positionManager } from '$lib/engine/positions';
   import { orderBook } from '$lib/engine/orderbook';
   import { computeAnalyticsSnapshot, computeCrossSessionAnalytics } from '$lib/engine/analytics';
-  import { evaluateStopsOnBar, tryFillOrderOnBar } from '$lib/engine/execution';
+  import {
+    createPendingOrder,
+    evaluateStopsOnBar,
+    executeMarketOrder,
+    tryFillOrderOnBar
+  } from '$lib/engine/execution';
   import { closePosition } from '$lib/engine/pnl';
+  import { calculateRiskBasedSize, validateStopTargets } from '$lib/engine/risk';
   import {
     createDefaultDrawingStyle,
     isDrawingTool
   } from '$lib/engine/chart-tools';
+  import {
+    buildChartEntryIntent,
+    deriveRiskSide,
+    type ChartEntryOrderMode,
+    type ChartEntrySizingMode
+  } from '$lib/engine/chart-entry';
   import {
     getDrawings,
     getSessionEvents,
@@ -33,8 +45,10 @@
     BacktestSession,
     Bar,
     DrawingEntity,
+    DrawingPoint,
     DrawingStyle,
     DrawingToolType,
+    RiskToolDraft,
     SessionEvent,
     SessionSnapshot,
     Timeframe,
@@ -108,6 +122,14 @@
   let latestLoadRequestId = 0;
   let activeDockTab: DockTab = 'positions';
   let drawingPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  let riskDraftSeed: DrawingPoint | null = null;
+  let riskDraft: RiskToolDraft | null = null;
+  let riskPanelError = '';
+  let riskOrderType: ChartEntryOrderMode = 'market';
+  let riskSizingMode: ChartEntrySizingMode = 'fixed';
+  let riskLotSize = 0.1;
+  let riskPercent = 1;
+  let riskTakeProfit = '';
 
   const chartTools: Array<{ id: DrawingToolType; label: string }> = [
     { id: 'cursor', label: 'Cursor' },
@@ -121,7 +143,8 @@
     { id: 'arrow', label: 'Arrow' },
     { id: 'ruler', label: 'Ruler' },
     { id: 'fibonacci', label: 'Fib' },
-    { id: 'brush', label: 'Brush' }
+    { id: 'brush', label: 'Brush' },
+    { id: 'risk_position', label: 'Risk' }
   ];
 
   const dockTabs: Array<{ id: DockTab; label: string }> = [
@@ -219,6 +242,11 @@
 
   function handleToolSelect(tool: DrawingToolType) {
     tradingStore.setActiveTool(tool);
+    if (tool !== 'risk_position') {
+      riskDraftSeed = null;
+      riskDraft = null;
+      riskPanelError = '';
+    }
     void persistToolPrefs();
   }
 
@@ -355,6 +383,156 @@
       ...selectedDrawing,
       zIndex: direction === 'front' ? maxZ + 1 : minZ - 1
     });
+  }
+
+  function handleRiskDraftPoint(point: DrawingPoint) {
+    if (activeTool !== 'risk_position') return;
+    if (!riskDraftSeed) {
+      riskDraftSeed = point;
+      riskDraft = null;
+      riskPanelError = '';
+      appendSessionEvent('risk_tool_opened', { entry: point });
+      return;
+    }
+
+    const side = deriveRiskSide(riskDraftSeed.price, point.price);
+    riskDraft = {
+      entry: riskDraftSeed,
+      stop: point,
+      side,
+      takeProfit: null,
+      createdAt: Date.now()
+    };
+    riskOrderType = 'market';
+    riskSizingMode = 'fixed';
+    riskLotSize = 0.1;
+    riskPercent = 1;
+    riskTakeProfit = '';
+    riskPanelError = '';
+    riskDraftSeed = null;
+  }
+
+  function cancelRiskDraft() {
+    riskDraft = null;
+    riskDraftSeed = null;
+    riskPanelError = '';
+    if (activeTool === 'risk_position') {
+      tradingStore.setActiveTool('cursor');
+      void persistToolPrefs();
+    }
+  }
+
+  function resolveReplayMarketContext() {
+    const timestamp = currentBar?.timestamp ?? Date.now();
+    const mid = currentBar?.close ?? 0;
+    const bid = $tradingStore.currentTick?.bid ?? mid - spread / 2;
+    const ask = $tradingStore.currentTick?.ask ?? mid + spread / 2;
+    return { timestamp, bid, ask };
+  }
+
+  function confirmRiskDraft() {
+    if (!riskDraft) return;
+    riskPanelError = '';
+    const market = resolveReplayMarketContext();
+
+    const intent = buildChartEntryIntent({
+      draft: riskDraft,
+      orderMode: riskOrderType,
+      market,
+      pair: currentPair
+    });
+
+    const stopValidation = validateStopTargets({
+      side: intent.side,
+      entryPrice: intent.entryPrice,
+      stopLoss: riskDraft.stop.price,
+      takeProfit: riskTakeProfit ? Number(riskTakeProfit) : undefined
+    });
+
+    if (stopValidation) {
+      riskPanelError = stopValidation;
+      return;
+    }
+
+    let size = riskLotSize;
+    if (riskSizingMode === 'risk_percent') {
+      const riskCalc = calculateRiskBasedSize(
+        equity,
+        riskPercent,
+        intent.entryPrice,
+        riskDraft.stop.price,
+        currentPair
+      );
+      size = riskCalc.size;
+      if (size <= 0) {
+        riskPanelError = 'Unable to compute size from risk inputs.';
+        return;
+      }
+    }
+
+    if (size <= 0) {
+      riskPanelError = 'Size must be greater than zero.';
+      return;
+    }
+
+    const riskAmount = Math.abs(intent.entryPrice - riskDraft.stop.price) * size;
+    const takeProfit = riskTakeProfit ? Number(riskTakeProfit) : undefined;
+
+    if (riskOrderType === 'market') {
+      const position = executeMarketOrder(
+        intent.side,
+        size,
+        market.bid,
+        market.ask,
+        market.timestamp,
+        {
+          sessionId,
+          stopLoss: riskDraft.stop.price,
+          takeProfit,
+          riskAmount,
+          slippage: $tradingStore.slippage
+        }
+      );
+      positionManager.add(position);
+      tradingStore.addPosition(position);
+      appendSessionEvent('position_opened', { positionId: position.id, side: position.side, size: position.size, source: 'risk_tool' });
+    } else {
+      const pending = createPendingOrder({
+        sessionId,
+        type: riskOrderType,
+        side: intent.side,
+        size,
+        createdAt: market.timestamp,
+        price: riskOrderType === 'limit' ? intent.entryPrice : undefined,
+        stopPrice: riskOrderType === 'stop' ? intent.entryPrice : undefined,
+        stopLoss: riskDraft.stop.price,
+        takeProfit,
+        riskAmount
+      });
+      orderBook.add(pending);
+      tradingStore.addOrder(pending);
+      appendSessionEvent('order_placed', { orderId: pending.id, type: pending.type, side: pending.side, size: pending.size, source: 'risk_tool' });
+    }
+
+    appendSessionEvent('risk_tool_confirmed', {
+      side: intent.side,
+      orderType: riskOrderType,
+      entryPrice: intent.entryPrice,
+      stopLoss: riskDraft.stop.price,
+      takeProfit: takeProfit ?? null,
+      size
+    });
+    riskDraft = null;
+    riskDraftSeed = null;
+    tradingStore.setActiveTool('cursor');
+    void persistToolPrefs();
+  }
+
+  function handlePositionLevelDrag(payload: { positionId: string; level: 'stopLoss' | 'takeProfit'; price: number }) {
+    const updated = positionManager.update(payload.positionId, { [payload.level]: payload.price });
+    if (!updated) return;
+    tradingStore.setPositions(positionManager.getAll());
+    appendSessionEvent('position_level_dragged', payload);
   }
 
   onMount(async () => {
@@ -748,6 +926,7 @@
   }
 
   async function handlePairChange(pair: TradingPair) {
+    cancelRiskDraft();
     if (sessionId) {
       await saveDrawings(sessionId, currentPair, drawings);
     }
@@ -917,6 +1096,9 @@
     if (e.key === ' ') {
       e.preventDefault();
       handlePlayPause();
+    } else if (e.key === 'Escape' && (riskDraft || riskDraftSeed)) {
+      e.preventDefault();
+      cancelRiskDraft();
     }
   }
 </script>
@@ -1117,10 +1299,14 @@
                   magnetEnabled={magnetEnabled}
                   drawingsVisible={drawingsVisible}
                   positions={positions}
+                  {riskDraft}
+                  riskDraftSeed={riskDraftSeed}
                   onCreateDrawing={handleCreateDrawing}
                   onUpdateDrawing={handleUpdateDrawing}
                   onDeleteDrawing={handleDeleteDrawing}
                   onSelectDrawing={(drawingId) => tradingStore.setSelectedDrawing(drawingId)}
+                  onRiskDraftPoint={handleRiskDraftPoint}
+                  onPositionLevelDrag={handlePositionLevelDrag}
                 />
               {/key}
             </div>
@@ -1130,6 +1316,69 @@
             <span>Progress {replayProgressPct.toFixed(1)}%</span>
             <span>Spread {spread.toFixed(2)}</span>
           </div>
+
+          {#if riskDraft}
+            <div class="risk-panel">
+              <div class="risk-panel-head">
+                <strong>Risk Entry</strong>
+                <span class="mono">{riskDraft.side.toUpperCase()}</span>
+              </div>
+              <div class="risk-panel-grid">
+                <label>
+                  Side
+                  <select bind:value={riskDraft.side}>
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                  </select>
+                </label>
+                <label>
+                  Type
+                  <select bind:value={riskOrderType}>
+                    <option value="market">Market</option>
+                    <option value="limit">Limit</option>
+                    <option value="stop">Stop</option>
+                  </select>
+                </label>
+                <label>
+                  Size Mode
+                  <select bind:value={riskSizingMode}>
+                    <option value="fixed">Fixed</option>
+                    <option value="risk_percent">Risk %</option>
+                  </select>
+                </label>
+                {#if riskSizingMode === 'fixed'}
+                  <label>
+                    Lot Size
+                    <input type="number" min="0.01" step="0.01" bind:value={riskLotSize} />
+                  </label>
+                {:else}
+                  <label>
+                    Risk %
+                    <input type="number" min="0.1" step="0.1" bind:value={riskPercent} />
+                  </label>
+                {/if}
+                <label>
+                  Entry
+                  <input type="number" step="0.01" value={riskDraft.entry.price.toFixed(2)} readonly />
+                </label>
+                <label>
+                  Stop
+                  <input type="number" step="0.01" value={riskDraft.stop.price.toFixed(2)} readonly />
+                </label>
+                <label>
+                  TP (optional)
+                  <input type="number" step="0.01" bind:value={riskTakeProfit} placeholder="none" />
+                </label>
+              </div>
+              {#if riskPanelError}
+                <p class="risk-error">{riskPanelError}</p>
+              {/if}
+              <div class="risk-panel-actions">
+                <button class="tool-btn mono" on:click={confirmRiskDraft}>Confirm</button>
+                <button class="tool-btn mono" on:click={cancelRiskDraft}>Cancel</button>
+              </div>
+            </div>
+          {/if}
         {/if}
       </div>
     </div>
@@ -1490,6 +1739,58 @@
     background: rgba(255, 178, 58, 0.15);
   }
 
+  .risk-panel {
+    margin: 8px 10px 10px;
+    border: 1px solid rgba(76, 141, 255, 0.5);
+    background: rgba(9, 18, 29, 0.92);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .risk-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-hi);
+    font-size: 11px;
+  }
+
+  .risk-panel-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .risk-panel-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-low);
+  }
+
+  .risk-panel-grid input,
+  .risk-panel-grid select {
+    border: 1px solid rgba(51, 65, 85, 0.65);
+    background: #121c2a;
+    color: #dae7ff;
+    font-size: 11px;
+    padding: 5px 6px;
+  }
+
+  .risk-panel-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .risk-error {
+    margin: 0;
+    color: #fecaca;
+    font-size: 11px;
+  }
+
   .right-rail {
     display: flex;
     flex-direction: column;
@@ -1642,6 +1943,10 @@
     .style-label {
       min-width: 90px;
       flex: 0 0 auto;
+    }
+
+    .risk-panel-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>
