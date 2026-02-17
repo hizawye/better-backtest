@@ -50,6 +50,11 @@ Backend (Bun + Hono)
 - Response includes `timeframe` and `sessionId` echo for traceability.
 - Frontend remains M1-source-first and may use server aggregation for parity/debug workflows.
 
+## Analytics Layer (Milestone 5)
+- Session analytics: computed from active session trades and saved as `analyticsSnapshots`.
+- Cross-session analytics: computed from all persisted trades in Dexie for longitudinal review.
+- Dashboard consumes both views to present immediate session diagnostics plus historical context.
+
 ## Request Flow (`/api/data/:pair/:from/:to`)
 1. Normalize pair (`NSXUSD` -> `NAS100`).
 2. Check Redis cache (fast-fail if Redis unavailable).

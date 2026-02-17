@@ -1,11 +1,11 @@
 # Project Status
 
-Last Updated: 2026-02-17 (Milestone 4)
+Last Updated: 2026-02-17 (Milestone 5)
 
 ## Current Progress
-- Milestone 4 complete: multi-timeframe replay path now has backend trace/aggregation compatibility.
-- Data route accepts `timeframe` and `sessionId` query params for deterministic request tracing.
-- Optional server-side aggregation path is available while frontend keeps M1-first aggregation/caching.
+- Milestone 5 complete: analytics layer now supports both session and cross-session summaries.
+- Cross-session metrics are computed from persisted trade history and shown in analytics panel.
+- Export-ready analytics state now includes broader context across all local sessions.
 
 ## Verification Status
 - `npm run test:frontend` passes (`9` tests: execution, pnl, risk, aggregation, lifecycle).
@@ -18,5 +18,4 @@ Last Updated: 2026-02-17 (Milestone 4)
 - `packages/frontend/tsconfig.json` still has a pre-existing include/path warning from Svelte tooling.
 
 ## Next Immediate Starting Point
-1. Expand Milestone 5 journaling/analytics coverage and exports.
-2. Run Milestone 6 hardening pass and release-readiness checks.
+1. Run Milestone 6 hardening pass and release-readiness checks.

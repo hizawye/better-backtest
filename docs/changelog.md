@@ -49,6 +49,16 @@
 ### Changed
 - Data route now returns normalized response including selected timeframe/session context.
 
+## [0.7.0] - 2026-02-17
+
+### Added
+- Milestone 5 analytics expansion:
+  - Cross-session analytics aggregation (sessions/trades/pnl/win-rate/best-worst session).
+  - Analytics dashboard now surfaces session + cross-session summary together.
+
+### Changed
+- Trade route now refreshes aggregated analytics across all persisted session trades.
+
 ## [0.2.0] - 2026-02-16
 
 ### Added

@@ -219,3 +219,12 @@
 - Keeps backend observability aligned with session-centric replay architecture.
 - Allows deterministic tracing of replay requests by session/run context.
 - Enables optional server-side aggregation for debugging/parity without forcing a frontend rewrite.
+
+---
+
+## 2026-02-17 - Milestone 5 Cross-Session Analytics
+
+**Decision**: Compute cross-session analytics from persisted local trades
+**Rationale**:
+- Users need more than single-session metrics to evaluate discretionary improvements over time.
+- Local aggregation preserves offline-first behavior and avoids backend dependency for v1.
