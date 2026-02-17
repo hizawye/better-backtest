@@ -113,3 +113,64 @@
 - packages/backend/src/adapters/forexrate.ts
 - packages/backend/src/services/aggregator.ts
 - packages/backend/src/routes/data.ts
+
+---
+
+## 2026-02-16 - NSXUSD HistData Local Dataset Integration
+
+**Decision**: Use HistData NSXUSD (M1) as local NAS100/NQ proxy data source
+**Rationale**:
+- User requested NQ-like data from HistData NSXUSD for immediate use.
+- API quotas/rate limits are too restrictive for broad historical backtesting.
+- Local files provide deterministic, repeatable reads and no network dependency.
+
+**Decision**: Normalize raw CSV into monthly JSON partitions
+**Rationale**:
+- Yearly files were slower for range reads and increased route latency.
+- Monthly partitions bound per-request IO and improved fetch times.
+- Simplifies targeted caching and incremental refresh later.
+
+**Decision**: Add pair alias normalization (`NSXUSD` -> `NAS100`) in API path
+**Rationale**:
+- Keeps frontend/app using canonical `NAS100` while supporting requested symbol.
+- Avoids duplicate code paths and cache key fragmentation.
+
+**Decision**: Make Redis cache fail fast when unavailable
+**Rationale**:
+- Redis connection retries were blocking request execution.
+- Fast-fail mode preserves API responsiveness in local/dev environments.
+
+**Implementation Artifacts**:
+- Scripts:
+  - `scripts/histdata/download_nsxusd_m1.sh`
+  - `scripts/histdata/build_nsxusd_dataset.ts`
+  - `scripts/histdata/validate_nsxusd_dataset.ts`
+- Backend:
+  - `packages/backend/src/adapters/histdata-local.ts`
+  - `packages/backend/src/services/aggregator.ts`
+  - `packages/backend/src/services/cache.ts`
+  - `packages/backend/src/routes/data.ts`
+- Dataset:
+  - `data/histdata/nsxusd/` (raw zips, raw csv, normalized monthly files, manifest)
+
+---
+
+## 2026-02-17 - Milestone 1 Session-Centric Frontend Core
+
+**Decision**: Treat backtest session as first-class persisted domain object in frontend
+**Rationale**:
+- Manual discretionary backtesting requires resumable context (pair, timeframe, range, replay point, account state).
+- Existing "last 7 days only" flow prevented deterministic backtest iteration.
+- Session-scoped persistence is needed before realistic execution and journaling milestones.
+
+**Decision**: Persist session metadata + snapshot + session entities in Dexie
+**Rationale**:
+- Keeps v1 single-user/local-first with no backend auth dependency.
+- Supports immediate resume without round-trip to backend for local state.
+- Provides compatible storage foundation for future journal and analytics tables.
+
+**Decision**: Aggregate timeframe client-side from M1 bars
+**Rationale**:
+- Avoids backend contract churn while milestone sequence is still evolving.
+- Keeps replay loop deterministic against a single loaded source bar set.
+- Enables `M1/M5/M15/H1/H4/D1` without changing existing NAS100 data route semantics.

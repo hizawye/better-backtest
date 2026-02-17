@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.3.0] - 2026-02-17
+
+### Added
+- Milestone 1 session-centric backtest core:
+  - `BacktestSession`/`BacktestConfig`/`ExecutionConfig`/`SessionSnapshot` shared contracts.
+  - Dexie persistence for sessions, snapshots, and session-scoped entities (orders, positions, trades).
+  - Timeframe aggregation utility for `M1/M5/M15/H1/H4/D1`.
+  - Session-aware replay controls: session select/new/save, timeframe switch, custom date range apply.
+
+### Changed
+- Trade route now boots through persisted session state and restores replay context.
+- Market data load is now date-range-driven and timeframe-aware instead of fixed 7-day replay only.
+- Store contract now includes session identity, range/timeframe state, and execution config.
+
+## [0.2.0] - 2026-02-16
+
+### Added
+- HistData NSXUSD (M1) downloader script:
+  - `scripts/histdata/download_nsxusd_m1.sh`
+- Dataset build and validation scripts:
+  - `scripts/histdata/build_nsxusd_dataset.ts`
+  - `scripts/histdata/validate_nsxusd_dataset.ts`
+- Local NSXUSD/NAS100 adapter:
+  - `packages/backend/src/adapters/histdata-local.ts`
+- New root scripts:
+  - `data:nsxusd:download`
+  - `data:nsxusd:build`
+  - `data:nsxusd:validate`
+
+### Changed
+- Aggregator now prioritizes local HistData for `NAS100` and falls back to remote providers.
+- API route now accepts `NSXUSD` as alias for `NAS100`.
+- Redis connection mode changed to fail fast when unavailable, preventing blocking behavior.
+- Dataset generated under `data/histdata/nsxusd/` with monthly normalized files and manifest.
+
 ## [0.1.1] - 2026-01-18
 
 ### Fixed

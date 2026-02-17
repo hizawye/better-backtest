@@ -4,29 +4,40 @@
 
 ```
 Browser (Svelte)
+├─ Session Manager (pair/timeframe/range/snapshot)
 ├─ TradingView Chart (Canvas, 60fps)
 ├─ Trading Engine (orders, P&L, positions)
-├─ Web Worker (1-min bar replay)
-└─ IndexedDB (weeks of cached bars)
+├─ Web Worker (replay stream)
+└─ IndexedDB (bars + sessions + snapshots + entities)
     ↕ REST API
 Backend (Bun + Hono)
-├─ Alpha Vantage API (25 req/day)
-├─ ForexRateAPI (1000 req/month)
-└─ Redis Cache (24h TTL)
+├─ HistData Local Adapter (NSXUSD -> NAS100, M1)
+├─ Alpha Vantage Adapter (fallback)
+├─ ForexRateAPI Adapter (fallback)
+└─ Redis Cache (24h TTL, optional)
 ```
 
-## Data Flow
-1. Backend fetches 1-min OHLC bars from free APIs
-2. Caches in Redis 24h, serves to frontend
-3. Frontend stores in IndexedDB (compressed)
-4. Web Worker streams bars at configurable speed
-5. Trading engine processes each bar, updates P&L
-6. Chart renders at 60fps
+## Data Sources
+- `NAS100` (and alias `NSXUSD`) are served from local HistData files in `data/histdata/nsxusd/normalized`.
+- Forex/index fallbacks still use external providers when local data is not available.
+- Local dataset currently contains `5,075,918` bars across `2010-2026` (M1).
 
-## Key Components
-- **Backend**: Bun + Hono for 200k req/s performance
-- **Frontend**: Svelte for minimal bundle size
-- **Charts**: TradingView Lightweight Charts for 60fps rendering
-- **Storage**: IndexedDB (offline) + Redis (cache)
-- **State**: Zustand for minimal overhead
-- **Workers**: Web Workers for tick replay + calculations
+## Session Flow (Milestone 1)
+1. Load persisted sessions from Dexie (`sessions` table).
+2. Select/create session with config: pair, timeframe, date range, starting balance, execution assumptions.
+3. Load bars from local cache/API using configured range (`/api/data/:pair/:from/:to`).
+4. Aggregate source M1 bars client-side to selected timeframe (`M1/M5/M15/H1/H4/D1`).
+5. Resume replay with persisted snapshot (balance/equity/index + entities).
+6. Save updated session/snapshot/entities on explicit save and on page teardown.
+
+## Request Flow (`/api/data/:pair/:from/:to`)
+1. Normalize pair (`NSXUSD` -> `NAS100`).
+2. Check Redis cache (fast-fail if Redis unavailable).
+3. If `NAS100`, load relevant month files from local HistData dataset.
+4. If local data is missing, query remote providers in parallel.
+5. Cache successful result and return JSON bars payload.
+
+## Dataset Build Flow
+1. `scripts/histdata/download_nsxusd_m1.sh` scrapes/downloads all NSXUSD M1 zip periods from HistData.
+2. `scripts/histdata/build_nsxusd_dataset.ts` extracts CSVs and normalizes into monthly JSON files.
+3. `scripts/histdata/validate_nsxusd_dataset.ts` verifies bar counts, ordering, and manifest consistency.
