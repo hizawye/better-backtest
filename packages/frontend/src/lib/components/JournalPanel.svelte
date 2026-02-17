@@ -2,7 +2,18 @@
   import { tradingStore } from '../stores/trading';
   import type { JournalEntry } from '$shared/types';
 
+  type JournalPrefill = {
+    id: string;
+    tradeId?: string;
+    setupTags?: string[];
+    confidence?: number;
+    checklist?: string | string[];
+    notes?: string;
+    reviewStatus?: 'todo' | 'reviewed';
+  };
+
   export let onSaveEntry: ((entry: JournalEntry, files: File[]) => void) | undefined;
+  export let prefill: JournalPrefill | null = null;
 
   $: trades = $tradingStore.trades;
   $: entries = $tradingStore.journalEntries;
@@ -15,6 +26,7 @@
   let notes = '';
   let reviewStatus: 'todo' | 'reviewed' = 'todo';
   let selectedFiles: File[] = [];
+  let lastPrefillId = '';
 
   function handleFileChange(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -43,6 +55,20 @@
     reviewStatus = 'todo';
     selectedFiles = [];
     selectedTradeId = '';
+  }
+
+  $: if (prefill && prefill.id !== lastPrefillId) {
+    selectedTradeId = prefill.tradeId ?? '';
+    setupTags = prefill.setupTags ? prefill.setupTags.join(', ') : '';
+    confidence = prefill.confidence ?? 3;
+    if (Array.isArray(prefill.checklist)) {
+      checklist = prefill.checklist.join('\n');
+    } else {
+      checklist = prefill.checklist ?? '';
+    }
+    notes = prefill.notes ?? '';
+    reviewStatus = prefill.reviewStatus ?? 'todo';
+    lastPrefillId = prefill.id;
   }
 </script>
 
@@ -121,57 +147,83 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    background: #0f161f;
   }
 
   .header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: #121b27;
   }
 
   .header h3 {
     margin: 0;
-    font-size: 13px;
-    color: var(--text-primary);
+    font-size: 11px;
+    color: var(--text-hi);
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
   }
 
   .content {
     flex: 1;
     overflow: auto;
-    padding: 12px;
+    min-height: 0;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
   }
 
   .form-row {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: #111923;
+    padding: 8px;
   }
 
   label {
-    font-size: 11px;
-    color: var(--text-secondary);
+    font-size: 10px;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
+    font-weight: 600;
   }
 
   input,
   select,
   textarea {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    border-radius: 4px;
+    background: #0f1721;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-hi);
+    border-radius: 6px;
     padding: 6px 8px;
-    font-size: 12px;
+    font-size: 11px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: rgba(76, 141, 255, 0.7);
+    outline: 2px solid rgba(76, 141, 255, 0.25);
+    outline-offset: 1px;
   }
 
   .btn-save {
     margin-top: 4px;
-    padding: 8px;
-    background: var(--accent-color);
-    color: white;
-    border-radius: 4px;
-    font-size: 12px;
+    padding: 10px;
+    background: rgba(76, 141, 255, 0.22);
+    border: 1px solid rgba(76, 141, 255, 0.62);
+    color: #d9e7ff;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
   }
 
   .entries {
@@ -182,24 +234,37 @@
   }
 
   .entry {
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
     padding: 8px;
-    font-size: 12px;
+    font-size: 11px;
+    background: #111923;
   }
 
   .entry-top {
     display: flex;
     justify-content: space-between;
-    color: var(--text-secondary);
-    font-size: 11px;
+    color: var(--text-low);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
   }
 
   .badge {
     text-transform: uppercase;
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    background: #1b2736;
+    border-radius: 999px;
+    padding: 2px 7px;
+    color: var(--text-mid);
   }
 
   p {
     margin: 6px 0;
+    color: var(--text-hi);
+  }
+
+  small {
+    color: var(--text-mid);
   }
 </style>

@@ -7,6 +7,7 @@
     DrawingPoint,
     DrawingToolType,
     Position,
+    RiskOverlayMetrics,
     RiskToolDraft,
     Timeframe
   } from '$shared/types';
@@ -39,12 +40,14 @@
   export let positions: Position[] = [];
   export let riskDraft: RiskToolDraft | null = null;
   export let riskDraftSeed: DrawingPoint | null = null;
+  export let riskOverlayMetrics: RiskOverlayMetrics | null = null;
 
   export let onCreateDrawing: ((drawing: DrawingEntity) => void) | undefined = undefined;
   export let onUpdateDrawing: ((drawing: DrawingEntity) => void) | undefined = undefined;
   export let onDeleteDrawing: ((drawingId: string) => void) | undefined = undefined;
   export let onSelectDrawing: ((drawingId: string | null) => void) | undefined = undefined;
   export let onRiskDraftPoint: ((point: DrawingPoint) => void) | undefined = undefined;
+  export let onRiskDraftAdjust: ((patch: Partial<RiskToolDraft>) => void) | undefined = undefined;
   export let onPositionLevelDrag:
     | ((payload: { positionId: string; level: 'stopLoss' | 'takeProfit'; price: number }) => void)
     | undefined = undefined;
@@ -79,7 +82,16 @@
         positionId: string;
         level: 'stopLoss' | 'takeProfit';
       }
+    | {
+        mode: 'risk-draft';
+        target: 'entry' | 'stop' | 'take-profit';
+      }
     | null = null;
+  let modifierDrawMode = false;
+  let dragUpdateFrameId: number | null = null;
+  let pendingDrawingUpdate: DrawingEntity | null = null;
+  let riskDraftUpdateFrameId: number | null = null;
+  let pendingRiskPatch: Partial<RiskToolDraft> | null = null;
 
   const RESIZE_LOG_THRESHOLD = 120;
   const shouldLogResizeWarnings =
@@ -91,6 +103,13 @@
     .slice()
     .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0) || a.updatedAt - b.updatedAt);
   $: draftDrawing = deriveDraftDrawing();
+  $: overlayInteractive =
+    modifierDrawMode ||
+    isDrawingTool(activeTool) ||
+    activeTool === 'risk_position' ||
+    riskDraft !== null ||
+    dragContext !== null ||
+    draftTool !== null;
 
   function queueResize(width: number, height: number) {
     const nextSize = normalizeChartSize(width, height);
@@ -256,10 +275,124 @@
     draftPoints = [anchor];
   }
 
+  function isSameAnchor(a: DrawingPoint, b: DrawingPoint): boolean {
+    return a.timestamp === b.timestamp && Math.abs(a.price - b.price) <= 0.0000001;
+  }
+
+  function areSamePoints(a: DrawingPoint[], b: DrawingPoint[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      if (!isSameAnchor(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  function scheduleDrawingUpdate(nextDrawing: DrawingEntity) {
+    if (!onUpdateDrawing) return;
+    pendingDrawingUpdate = nextDrawing;
+    if (dragUpdateFrameId !== null) return;
+    dragUpdateFrameId = requestAnimationFrame(() => {
+      dragUpdateFrameId = null;
+      if (!pendingDrawingUpdate || !onUpdateDrawing) return;
+      onUpdateDrawing(pendingDrawingUpdate);
+      pendingDrawingUpdate = null;
+    });
+  }
+
+  function flushPendingDrawingUpdate() {
+    if (!pendingDrawingUpdate || !onUpdateDrawing) return;
+    onUpdateDrawing(pendingDrawingUpdate);
+    pendingDrawingUpdate = null;
+  }
+
+  function scheduleRiskDraftAdjust(patch: Partial<RiskToolDraft>) {
+    if (!onRiskDraftAdjust) return;
+    pendingRiskPatch = patch;
+    if (riskDraftUpdateFrameId !== null) return;
+    riskDraftUpdateFrameId = requestAnimationFrame(() => {
+      riskDraftUpdateFrameId = null;
+      if (!pendingRiskPatch || !onRiskDraftAdjust) return;
+      onRiskDraftAdjust(pendingRiskPatch);
+      pendingRiskPatch = null;
+    });
+  }
+
+  function flushRiskDraftAdjust() {
+    if (!pendingRiskPatch || !onRiskDraftAdjust) return;
+    onRiskDraftAdjust(pendingRiskPatch);
+    pendingRiskPatch = null;
+  }
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function pickRiskDraftHandle(event: PointerEvent): 'entry' | 'stop' | 'take-profit' | null {
+    if (!riskDraft || !candlestickSeries) return null;
+    const pointer = pointerInChart(event);
+    const threshold = 8;
+    const handleRadius = 10;
+    const leftHandleX = 12;
+    const rightHandleX = Math.max(12, overlayWidth - 12);
+    const centerX = overlayWidth / 2;
+
+    const entryY = candlestickSeries.priceToCoordinate(riskDraft.entry.price);
+    const stopY = candlestickSeries.priceToCoordinate(riskDraft.stop.price);
+    const targetPrice = typeof riskDraft.takeProfit?.price === 'number' ? riskDraft.takeProfit.price : null;
+    const targetY = targetPrice !== null ? candlestickSeries.priceToCoordinate(targetPrice) : null;
+
+    const nearHandle = (x: number, y: number) =>
+      Math.hypot(pointer.x - x, pointer.y - y) <= handleRadius;
+
+    if (typeof targetY === 'number') {
+      if (
+        nearHandle(leftHandleX, targetY) ||
+        nearHandle(rightHandleX, targetY) ||
+        (Math.abs(pointer.y - targetY) <= threshold &&
+          pointer.x >= leftHandleX &&
+          pointer.x <= rightHandleX)
+      ) {
+        return 'take-profit';
+      }
+    }
+
+    if (
+      typeof entryY === 'number' &&
+      (nearHandle(centerX, entryY) ||
+        (Math.abs(pointer.y - entryY) <= threshold && Math.abs(pointer.x - centerX) <= 32))
+    ) {
+      return 'entry';
+    }
+
+    if (typeof stopY === 'number') {
+      if (
+        nearHandle(leftHandleX, stopY) ||
+        nearHandle(rightHandleX, stopY) ||
+        (Math.abs(pointer.y - stopY) <= threshold &&
+          pointer.x >= leftHandleX &&
+          pointer.x <= rightHandleX)
+      ) {
+        return 'stop';
+      }
+    }
+
+    return null;
+  }
+
   function handleOverlayPointerDown(event: PointerEvent) {
+    if (!overlayInteractive) return;
     isPointerDown = true;
     const anchor = pointerToAnchor(event);
     if (!anchor) return;
+
+    const riskHit = pickRiskDraftHandle(event);
+    if (riskHit) {
+      dragContext = {
+        mode: 'risk-draft',
+        target: riskHit
+      };
+      return;
+    }
 
     if (activeTool === 'risk_position') {
       onRiskDraftPoint?.(anchor);
@@ -268,6 +401,16 @@
 
     if (isDrawingTool(activeTool)) {
       startDrawingMode(anchor);
+      return;
+    }
+
+    const levelHit = pickPositionLevelHit(event);
+    if (levelHit) {
+      dragContext = {
+        mode: 'position-level',
+        positionId: levelHit.positionId,
+        level: levelHit.level
+      };
       return;
     }
 
@@ -328,7 +471,7 @@
   }
 
   function handleDrawingDrag(anchor: DrawingPoint) {
-    if (!dragContext || dragContext.mode === 'position-level' || !onUpdateDrawing) return;
+    if (!dragContext || dragContext.mode === 'position-level' || dragContext.mode === 'risk-draft' || !onUpdateDrawing) return;
     const context = dragContext;
     const drawing = drawings.find((item) => item.id === context.drawingId);
     if (!drawing) return;
@@ -346,7 +489,9 @@
       }));
     }
 
-    onUpdateDrawing({
+    if (areSamePoints(nextPoints, drawing.points)) return;
+
+    scheduleDrawingUpdate({
       ...drawing,
       points: nextPoints,
       updatedAt: Date.now()
@@ -359,6 +504,36 @@
       positionId: dragContext.positionId,
       level: dragContext.level,
       price: anchor.price
+    });
+  }
+
+  function handleRiskDraftDrag(anchor: DrawingPoint) {
+    if (!dragContext || dragContext.mode !== 'risk-draft' || !riskDraft) return;
+    if (dragContext.target === 'entry') {
+      scheduleRiskDraftAdjust({
+        entry: {
+          ...riskDraft.entry,
+          price: anchor.price
+        }
+      });
+      return;
+    }
+
+    if (dragContext.target === 'stop') {
+      scheduleRiskDraftAdjust({
+        stop: {
+          ...riskDraft.stop,
+          price: anchor.price
+        }
+      });
+      return;
+    }
+
+    scheduleRiskDraftAdjust({
+      takeProfit: {
+        timestamp: riskDraft.entry.timestamp,
+        price: anchor.price
+      }
     });
   }
 
@@ -386,6 +561,7 @@
   }
 
   function handleOverlayPointerMove(event: PointerEvent) {
+    if (!overlayInteractive && !dragContext) return;
     const anchor = pointerToAnchor(event);
     if (!anchor) return;
 
@@ -396,13 +572,15 @@
     if (dragContext) {
       if (dragContext.mode === 'position-level') {
         handlePositionLevelDrag(anchor);
+      } else if (dragContext.mode === 'risk-draft') {
+        handleRiskDraftDrag(anchor);
       } else {
         handleDrawingDrag(anchor);
       }
       return;
     }
 
-    if (activeTool === 'cursor' && isPointerDown) {
+    if ((activeTool === 'cursor' || modifierDrawMode) && isPointerDown) {
       const levelHit = pickPositionLevelHit(event);
       if (levelHit) {
         dragContext = {
@@ -419,6 +597,8 @@
       commitDrawingFromDraft();
     }
     isPointerDown = false;
+    flushPendingDrawingUpdate();
+    flushRiskDraftAdjust();
     dragContext = null;
   }
 
@@ -504,6 +684,13 @@
     }
   }
 
+  function handleToolModifierKey(event: KeyboardEvent) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.key === 'Shift') {
+      modifierDrawMode = event.type === 'keydown';
+    }
+  }
+
   onMount(() => {
     const initialSize = normalizeChartSize(chartContainer.clientWidth, chartContainer.clientHeight);
     chart = createChart(chartContainer, {
@@ -576,6 +763,16 @@
       cancelAnimationFrame(resizeFrameId);
       resizeFrameId = null;
     }
+    if (dragUpdateFrameId !== null) {
+      cancelAnimationFrame(dragUpdateFrameId);
+      dragUpdateFrameId = null;
+    }
+    if (riskDraftUpdateFrameId !== null) {
+      cancelAnimationFrame(riskDraftUpdateFrameId);
+      riskDraftUpdateFrameId = null;
+    }
+    pendingDrawingUpdate = null;
+    pendingRiskPatch = null;
     resizeObserver?.disconnect();
     resizeObserver = null;
     if (chart) {
@@ -618,7 +815,11 @@
   }
 </script>
 
-<svelte:window on:keydown={handleDeleteKey} />
+<svelte:window
+  on:keydown={handleDeleteKey}
+  on:keydown={handleToolModifierKey}
+  on:keyup={handleToolModifierKey}
+/>
 
 <div class="chart-wrapper">
   <div class="chart-meta">
@@ -641,6 +842,7 @@
   <svg
     bind:this={chartOverlay}
     class="chart-overlay"
+    class:interactive={overlayInteractive}
     viewBox={`0 0 ${Math.max(overlayWidth, 1)} ${Math.max(overlayHeight, 1)}`}
     on:pointerdown={handleOverlayPointerDown}
     on:pointermove={handleOverlayPointerMove}
@@ -759,20 +961,62 @@
     {#if riskDraft}
       {@const entryScreen = pointToScreen(riskDraft.entry)}
       {@const stopScreen = pointToScreen(riskDraft.stop)}
+      {@const targetScreen = riskDraft.takeProfit ? pointToScreen(riskDraft.takeProfit) : null}
       {#if entryScreen && stopScreen}
-        {@const top = Math.min(entryScreen.y, stopScreen.y)}
-        {@const height = Math.max(Math.abs(entryScreen.y - stopScreen.y), 1)}
+        {@const stopZoneTop = Math.min(entryScreen.y, stopScreen.y)}
+        {@const stopZoneHeight = Math.max(Math.abs(entryScreen.y - stopScreen.y), 1)}
+        {@const chipWidth = Math.min(248, Math.max(164, overlayWidth - 16))}
+        {@const chipMargin = 8}
+        {@const preferLeft = entryScreen.x > overlayWidth * 0.62}
+        {@const chipXRaw = preferLeft ? entryScreen.x - chipWidth - 12 : entryScreen.x + 12}
+        {@const chipX = clamp(chipXRaw, chipMargin, overlayWidth - chipWidth - chipMargin)}
+        {@const topBaseY = (targetScreen ? targetScreen.y : entryScreen.y) - 30}
+        {@const topLabelY = clamp(topBaseY < chipMargin ? (targetScreen ? targetScreen.y + 8 : entryScreen.y + 8) : topBaseY, chipMargin, overlayHeight - 26)}
+        {@const middleBaseY = entryScreen.y - 13}
+        {@const middleLabelY = clamp(middleBaseY < chipMargin ? entryScreen.y + 10 : middleBaseY, chipMargin, overlayHeight - 28)}
+        {@const bottomBaseY = stopScreen.y + 8}
+        {@const bottomLabelY = clamp(bottomBaseY > overlayHeight - 26 ? stopScreen.y - 30 : bottomBaseY, chipMargin, overlayHeight - 26)}
+        {#if targetScreen}
+          {@const targetZoneTop = Math.min(entryScreen.y, targetScreen.y)}
+          {@const targetZoneHeight = Math.max(Math.abs(entryScreen.y - targetScreen.y), 1)}
+          <rect
+            x="0"
+            y={targetZoneTop}
+            width={overlayWidth}
+            height={targetZoneHeight}
+            class="risk-target-zone"
+          />
+          <line x1="0" x2={overlayWidth} y1={targetScreen.y} y2={targetScreen.y} class="risk-target" />
+          <circle cx="12" cy={targetScreen.y} r="4.5" class="risk-handle target" />
+          <circle cx={overlayWidth - 12} cy={targetScreen.y} r="4.5" class="risk-handle target" />
+        {/if}
         <rect
           x="0"
-          y={top}
+          y={stopZoneTop}
           width={overlayWidth}
-          height={height}
-          class:risk-buy={riskDraft.side === 'buy'}
-          class:risk-sell={riskDraft.side === 'sell'}
-          class="risk-box"
+          height={stopZoneHeight}
+          class="risk-stop-zone"
         />
         <line x1="0" x2={overlayWidth} y1={entryScreen.y} y2={entryScreen.y} class="risk-entry" />
         <line x1="0" x2={overlayWidth} y1={stopScreen.y} y2={stopScreen.y} class="risk-stop" />
+        <circle cx={overlayWidth / 2} cy={entryScreen.y} r="5" class="risk-handle entry" />
+        <circle cx="12" cy={stopScreen.y} r="4.5" class="risk-handle stop" />
+        <circle cx={overlayWidth - 12} cy={stopScreen.y} r="4.5" class="risk-handle stop" />
+
+        <g class="risk-chip top" transform={`translate(${chipX}, ${topLabelY})`}>
+          <rect width={chipWidth} height="22" rx="5" />
+          <text x="8" y="15">{riskOverlayMetrics?.topLabel ?? 'Target: --'}</text>
+        </g>
+
+        <g class="risk-chip mid" transform={`translate(${chipX}, ${middleLabelY})`}>
+          <rect width={chipWidth} height="24" rx="5" />
+          <text x="8" y="16">{riskOverlayMetrics?.middleLabel ?? 'Open P&L: --, Qty: --, RR: --'}</text>
+        </g>
+
+        <g class="risk-chip stop" transform={`translate(${chipX}, ${bottomLabelY})`}>
+          <rect width={chipWidth} height="22" rx="5" />
+          <text x="8" y="15">{riskOverlayMetrics?.bottomLabel ?? 'Stop: --'}</text>
+        </g>
       {/if}
     {/if}
 
@@ -882,6 +1126,11 @@
     z-index: 3;
     width: 100%;
     height: 100%;
+    pointer-events: none;
+    cursor: default;
+  }
+
+  .chart-overlay.interactive {
     pointer-events: auto;
     cursor: crosshair;
   }
@@ -906,28 +1155,73 @@
     stroke-width: 2;
   }
 
-  .risk-box {
-    fill-opacity: 0.2;
+  .risk-target-zone {
+    fill: rgba(16, 185, 129, 0.22);
     stroke: none;
   }
 
-  .risk-box.risk-buy {
-    fill: #22c55e;
+  .risk-stop-zone {
+    fill: rgba(239, 68, 68, 0.2);
+    stroke: none;
   }
 
-  .risk-box.risk-sell {
-    fill: #ef4444;
+  .risk-target {
+    stroke: rgba(45, 212, 191, 0.94);
+    stroke-width: 1.4;
+    stroke-dasharray: 6 4;
   }
 
   .risk-entry {
-    stroke: #93c5fd;
-    stroke-width: 1.5;
+    stroke: #5aa8ff;
+    stroke-width: 1.35;
     stroke-dasharray: 6 4;
   }
 
   .risk-stop {
-    stroke: #ef4444;
-    stroke-width: 1.5;
+    stroke: rgba(255, 107, 129, 0.96);
+    stroke-width: 1.35;
     stroke-dasharray: 6 4;
+  }
+
+  .risk-handle {
+    fill: #0d1521;
+    stroke: #327cf5;
+    stroke-width: 1.7;
+  }
+
+  .risk-handle.entry {
+    stroke: #5aa8ff;
+  }
+
+  .risk-handle.stop {
+    stroke: #ff5f75;
+  }
+
+  .risk-handle.target {
+    stroke: #2cd1a7;
+  }
+
+  .risk-chip rect {
+    fill: rgba(9, 20, 31, 0.82);
+    stroke: rgba(122, 159, 198, 0.44);
+    stroke-width: 1;
+  }
+
+  .risk-chip text {
+    fill: #dbecff;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'IBM Plex Sans', 'Inter', sans-serif;
+    letter-spacing: 0.12px;
+  }
+
+  .risk-chip.mid rect {
+    fill: rgba(14, 35, 44, 0.82);
+    stroke: rgba(92, 196, 167, 0.55);
+  }
+
+  .risk-chip.stop rect {
+    fill: rgba(47, 22, 30, 0.82);
+    stroke: rgba(238, 105, 126, 0.56);
   }
 </style>

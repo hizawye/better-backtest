@@ -15,8 +15,8 @@
   <div class="table-header">
     <h3>Trade History ({trades.length})</h3>
     <div class="stats">
-      <span class="stat">Win Rate: <strong>{winRate}%</strong></span>
-      <span class="stat">Total P&L: <strong class:positive={totalPnL > 0} class:negative={totalPnL < 0}>{formatPnL(totalPnL)}</strong></span>
+      <span class="stat">Win Rate <strong>{winRate}%</strong></span>
+      <span class="stat">Total <strong class:positive={totalPnL > 0} class:negative={totalPnL < 0}>{formatPnL(totalPnL)}</strong></span>
     </div>
   </div>
 
@@ -69,47 +69,63 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    background: #0f161f;
   }
 
   .table-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
+    background: #121b27;
   }
 
   .table-header h3 {
     margin: 0;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-hi);
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
   }
 
   .stats {
     display: flex;
-    gap: 20px;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .stat {
-    font-size: 12px;
-    color: var(--text-secondary);
+    font-size: 10px;
+    color: var(--text-low);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    background: #111923;
+    border-radius: 999px;
+    padding: 4px 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
   }
 
   .stat strong {
-    color: var(--text-primary);
+    color: var(--text-hi);
+    margin-left: 4px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
   }
 
   .table-wrapper {
     flex: 1;
-    overflow-y: auto;
+    overflow: auto;
+    min-height: 0;
   }
 
   .empty-state {
     padding: 40px 20px;
     text-align: center;
-    color: var(--text-secondary);
-    font-size: 13px;
+    color: var(--text-low);
+    font-size: 12px;
   }
 
   table {
@@ -120,53 +136,58 @@
   thead {
     position: sticky;
     top: 0;
-    background: var(--bg-secondary);
+    background: #111923;
     z-index: 1;
   }
 
   th {
-    padding: 10px 12px;
+    padding: 8px 10px;
     text-align: left;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text-low);
     text-transform: uppercase;
-    border-bottom: 1px solid var(--border-color);
+    letter-spacing: 0.45px;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   td {
-    padding: 10px 12px;
-    font-size: 12px;
-    color: var(--text-primary);
-    border-bottom: 1px solid var(--border-color);
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text-hi);
+    border-bottom: 1px solid rgba(38, 49, 66, 0.62);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
   }
 
   tbody tr:hover {
-    background: var(--bg-primary);
+    background: rgba(76, 141, 255, 0.06);
   }
 
   .side {
-    padding: 3px 8px;
-    border-radius: 3px;
-    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
     font-weight: 600;
+    font-family: 'IBM Plex Sans', sans-serif;
   }
 
   .side.buy {
-    background: rgba(8, 153, 129, 0.2);
-    color: var(--success-color);
+    background: rgba(20, 184, 122, 0.14);
+    color: var(--bull);
+    border: 1px solid rgba(20, 184, 122, 0.35);
   }
 
   .side.sell {
-    background: rgba(242, 54, 69, 0.2);
-    color: var(--danger-color);
+    background: rgba(240, 91, 110, 0.14);
+    color: var(--bear);
+    border: 1px solid rgba(240, 91, 110, 0.35);
   }
 
   .positive {
-    color: var(--success-color);
+    color: var(--bull);
   }
 
   .negative {
-    color: var(--danger-color);
+    color: var(--bear);
   }
 </style>

@@ -86,16 +86,26 @@ export function getLineDash(style: DrawingStyle): string | null {
 
 export function snapTimestampToBars(timestamp: number, bars: Bar[]): number {
   if (bars.length === 0) return timestamp;
-  let best = bars[0].timestamp;
-  let bestDistance = Math.abs(timestamp - best);
-  for (let index = 1; index < bars.length; index += 1) {
-    const distance = Math.abs(timestamp - bars[index].timestamp);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = bars[index].timestamp;
+  let low = 0;
+  let high = bars.length - 1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const value = bars[mid].timestamp;
+    if (value === timestamp) return value;
+    if (value < timestamp) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
     }
   }
-  return best;
+
+  if (high < 0) return bars[0].timestamp;
+  if (low >= bars.length) return bars[bars.length - 1].timestamp;
+
+  const lower = bars[high].timestamp;
+  const upper = bars[low].timestamp;
+  return Math.abs(timestamp - lower) <= Math.abs(upper - timestamp) ? lower : upper;
 }
 
 function distanceToSegment(point: ScreenPoint, a: ScreenPoint, b: ScreenPoint): number {

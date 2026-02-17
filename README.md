@@ -1,6 +1,6 @@
 # Better Backtest
 
-Fast, offline-capable forex backtesting platform. Better than FXReplay: faster performance, improved UX, offline mode.
+Fast, offline-capable trading replay/backtesting platform with local NAS100 (NQ proxy) 1-minute history and forex support.
 
 ## Features
 
@@ -11,6 +11,7 @@ Fast, offline-capable forex backtesting platform. Better than FXReplay: faster p
 - **Real Trading**: Market/Limit/Stop orders with realistic spreads
 - **Analytics**: Win rate, drawdown, P&L tracking
 - **Keyboard Shortcuts**: B (buy), S (sell), Space (play/pause)
+- **NAS100 Local Data**: HistData NSXUSD M1 dataset integrated as local source
 
 ## Tech Stack
 
@@ -18,7 +19,8 @@ Fast, offline-capable forex backtesting platform. Better than FXReplay: faster p
 - **Runtime**: Bun (3x faster than Node)
 - **Framework**: Hono
 - **Cache**: Redis
-- **APIs**: Alpha Vantage, ForexRateAPI
+- **Primary Data**: Local HistData NSXUSD M1 files (`NAS100` alias support)
+- **Fallback APIs**: Alpha Vantage, ForexRateAPI
 
 ### Frontend
 - **Framework**: Svelte + SvelteKit
@@ -47,6 +49,17 @@ bun run dev
 
 Backend runs on http://localhost:3000
 
+### Optional: Build/Refresh NSXUSD Dataset
+
+```bash
+# from repo root
+npm run data:nsxusd:download
+npm run data:nsxusd:build
+npm run data:nsxusd:validate
+```
+
+Generated files are stored in `data/histdata/nsxusd/`.
+
 ### Frontend Setup
 
 ```bash
@@ -68,6 +81,8 @@ Add them to `packages/backend/.env`:
 ```
 ALPHA_VANTAGE_API_KEY=your_key_here
 FOREXRATE_API_KEY=your_key_here
+# Optional override if dataset stored outside default path
+HISTDATA_NSXUSD_DIR=../../data/histdata/nsxusd/normalized
 ```
 
 ## Keyboard Shortcuts
@@ -87,8 +102,9 @@ Browser (Svelte)
 └─ IndexedDB (weeks of cached bars)
     ↕ REST API
 Backend (Bun + Hono)
-├─ Alpha Vantage API (25 req/day)
-├─ ForexRateAPI (1000 req/month)
+├─ HistData local adapter (NSXUSD -> NAS100)
+├─ Alpha Vantage API (fallback)
+├─ ForexRateAPI (fallback)
 └─ Redis Cache (24h TTL)
 ```
 
@@ -98,6 +114,11 @@ Backend (Bun + Hono)
 - GBP/USD (1.5 pips spread)
 - USD/JPY (1.5 pips spread)
 - USD/CHF (2.5 pips spread)
+- NAS100 (2.0 points spread, local HistData NSXUSD source)
+- US500 (0.5 points spread, provider dependent)
+
+API symbol note:
+- `NSXUSD` is accepted by backend routes and normalized to `NAS100`.
 
 ## Performance Targets
 

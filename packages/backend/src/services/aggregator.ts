@@ -1,6 +1,7 @@
 import type { Bar } from '../../../shared/types';
 import * as alphaVantage from '../adapters/alpha-vantage';
 import * as forexRate from '../adapters/forexrate';
+import * as histDataLocal from '../adapters/histdata-local';
 import { getCached, setCache } from './cache';
 
 const providers = [
@@ -8,22 +9,43 @@ const providers = [
   { name: 'ForexRateAPI', fetch: forexRate.fetchBars },
 ];
 
+function normalizePair(pair: string): string {
+  return pair === 'NSXUSD' ? 'NAS100' : pair;
+}
+
 export async function fetchBars(
   pair: string,
   from: number,
   to: number
 ): Promise<Bar[]> {
-  const cacheKey = `bars:${pair}:${from}:${to}`;
+  const normalizedPair = normalizePair(pair);
+  const cacheKey = `bars:${normalizedPair}:${from}:${to}`;
   const startTime = Date.now();
 
   // Try cache first
   const cached = await getCached<Bar[]>(cacheKey);
   if (cached) {
-    console.log(`✓ Cache hit for ${pair} (${cached.length} bars)`);
+    console.log(`✓ Cache hit for ${normalizedPair} (${cached.length} bars)`);
     return cached;
   }
 
-  console.log(`⚡ Fetching ${pair} from providers...`);
+  // Prefer local NSXUSD/NAS100 dataset before remote providers
+  if (normalizedPair === 'NAS100') {
+    try {
+      const localBars = await histDataLocal.fetchBars(normalizedPair, from, to);
+      if (localBars.length > 0) {
+        console.log(`✓ HistDataLocal returned ${localBars.length} bars for ${normalizedPair}`);
+        await setCache(cacheKey, localBars, 86400);
+        return localBars;
+      }
+      console.warn(`⚠ HistDataLocal has no bars for ${normalizedPair} in requested range`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`✗ HistDataLocal failed: ${errorMsg}`);
+    }
+  }
+
+  console.log(`⚡ Fetching ${normalizedPair} from providers...`);
 
   // Try all providers in parallel
   const PROVIDER_TIMEOUT = 15000; // 15s per provider
@@ -34,7 +56,7 @@ export async function fetchBars(
     console.log(`→ Trying ${provider.name}...`);
 
     try {
-      const barsPromise = provider.fetch(pair, from, to);
+      const barsPromise = provider.fetch(normalizedPair, from, to);
       const timeoutPromise = new Promise<Bar[]>((_, reject) =>
         setTimeout(() => reject(new Error(`Timeout after 15s`)), PROVIDER_TIMEOUT)
       );

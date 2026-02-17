@@ -125,12 +125,52 @@ export interface ChartToolState {
   drawingsVisible: boolean;
 }
 
+export type WorkspaceRightTab = 'order' | 'risk' | 'account';
+export type WorkspaceBottomTab = 'positions' | 'trades' | 'events' | 'journal' | 'analytics';
+
+export interface WorkspacePrefs {
+  watchlistVisible: boolean;
+  rightDrawerOpen: boolean;
+  rightDrawerTab: WorkspaceRightTab;
+  bottomDrawerOpen: boolean;
+  bottomDrawerTab: WorkspaceBottomTab;
+  compactToolbar: boolean;
+}
+
 export interface RiskToolDraft {
   entry: DrawingPoint;
   stop: DrawingPoint;
   takeProfit?: DrawingPoint | null;
   side: 'buy' | 'sell';
   createdAt: number;
+  size?: number;
+  riskAmount?: number;
+  targetAmount?: number;
+  rewardRatio?: number | null;
+  openPnlEstimate?: number;
+  ticksToStop?: number;
+  ticksToTarget?: number | null;
+  pctToStop?: number;
+  pctToTarget?: number | null;
+}
+
+export interface RiskOverlayMetrics {
+  side: 'buy' | 'sell';
+  size: number;
+  openPnlEstimate: number;
+  rewardRatio: number | null;
+  riskAmount: number;
+  targetAmount: number | null;
+  ticksToStop: number;
+  ticksToTarget: number | null;
+  pctToStop: number;
+  pctToTarget: number | null;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number | null;
+  topLabel: string;
+  middleLabel: string;
+  bottomLabel: string;
 }
 
 export interface ExecutionConfig {

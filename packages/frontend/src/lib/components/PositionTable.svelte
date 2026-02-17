@@ -181,21 +181,26 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    background: #0f161f;
   }
 
   .table-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: #121b27;
   }
 
   .table-header h3 {
     margin: 0;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-hi);
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
   }
 
   .header-actions {
@@ -205,34 +210,47 @@
   }
 
   .header-actions input {
-    width: 64px;
-    padding: 4px 6px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
+    width: 68px;
+    padding: 5px 6px;
+    background: #111923;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-hi);
     font-size: 11px;
   }
 
   .btn-small {
-    padding: 5px 8px;
-    border-radius: 4px;
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    font-size: 11px;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: #1b2736;
+    color: var(--text-hi);
+    border: 1px solid var(--border-subtle);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .btn-small:hover:not(:disabled) {
+    border-color: rgba(114, 136, 166, 0.75);
+  }
+
+  .btn-small:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .table-wrapper {
     flex: 1;
-    overflow-y: auto;
+    overflow: auto;
+    min-height: 0;
   }
 
   .empty-state {
     padding: 40px 20px;
     text-align: center;
-    color: var(--text-secondary);
-    font-size: 13px;
+    color: var(--text-low);
+    font-size: 12px;
   }
 
   table {
@@ -243,81 +261,89 @@
   thead {
     position: sticky;
     top: 0;
-    background: var(--bg-secondary);
+    background: #111923;
     z-index: 1;
   }
 
   th {
-    padding: 10px 12px;
+    padding: 8px 10px;
     text-align: left;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text-low);
     text-transform: uppercase;
-    border-bottom: 1px solid var(--border-color);
+    letter-spacing: 0.45px;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   td {
-    padding: 10px 12px;
-    font-size: 12px;
-    color: var(--text-primary);
-    border-bottom: 1px solid var(--border-color);
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text-hi);
+    border-bottom: 1px solid rgba(38, 49, 66, 0.62);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
   }
 
   tbody tr:hover {
-    background: var(--bg-primary);
+    background: rgba(76, 141, 255, 0.06);
   }
 
   .side {
-    padding: 3px 8px;
-    border-radius: 3px;
-    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
     font-weight: 600;
+    font-family: 'IBM Plex Sans', sans-serif;
   }
 
   .side.buy {
-    background: rgba(8, 153, 129, 0.2);
-    color: var(--success-color);
+    background: rgba(20, 184, 122, 0.14);
+    color: var(--bull);
+    border: 1px solid rgba(20, 184, 122, 0.35);
   }
 
   .side.sell {
-    background: rgba(242, 54, 69, 0.2);
-    color: var(--danger-color);
+    background: rgba(240, 91, 110, 0.14);
+    color: var(--bear);
+    border: 1px solid rgba(240, 91, 110, 0.35);
   }
 
   .positive {
-    color: var(--success-color);
+    color: var(--bull);
   }
 
   .negative {
-    color: var(--danger-color);
+    color: var(--bear);
   }
 
   .btn-close {
-    padding: 4px 8px;
+    padding: 4px 7px;
     background: transparent;
-    color: var(--text-secondary);
-    font-size: 14px;
-    border-radius: 3px;
-    transition: all 0.2s;
+    color: var(--text-low);
+    font-size: 12px;
+    border-radius: 5px;
+    transition: all 0.15s;
+    border: 1px solid transparent;
   }
 
   .btn-close:hover {
-    background: var(--danger-color);
-    color: white;
+    background: rgba(240, 91, 110, 0.15);
+    color: var(--bear);
+    border-color: rgba(240, 91, 110, 0.4);
   }
 
   .btn-mini {
     margin-right: 6px;
     padding: 4px 7px;
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
-    border-radius: 4px;
-    font-size: 11px;
+    background: #1b2736;
+    color: var(--text-mid);
+    border-radius: 6px;
+    font-size: 10px;
+    border: 1px solid rgba(71, 85, 105, 0.55);
   }
 
   .btn-mini:hover {
-    background: var(--accent-color);
-    color: white;
+    color: var(--text-hi);
+    border-color: rgba(114, 136, 166, 0.75);
   }
 </style>

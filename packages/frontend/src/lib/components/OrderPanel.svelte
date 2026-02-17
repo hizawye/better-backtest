@@ -1,7 +1,14 @@
 <script lang="ts">
   import { tradingStore } from '../stores/trading';
   import { createPendingOrder, executeMarketOrder } from '../engine/execution';
-  import { getExposure, getOpenRisk, calculateRiskBasedSize, validateStopTargets } from '../engine/risk';
+  import { getExposure, getOpenRisk } from '../engine/risk';
+  import {
+    resolveEntryPrice,
+    resolveSizeAndRisk,
+    validateOrderInput,
+    type OrderFormOrderType,
+    type OrderFormSizingMode
+  } from '../engine/order-form-controller';
   import { positionManager } from '../engine/positions';
   import { orderBook } from '../engine/orderbook';
   import type { SessionEvent } from '$shared/types';
@@ -24,9 +31,9 @@
   export let onSessionEvent: ((type: SessionEvent['type'], payload?: Record<string, unknown>) => void) | undefined;
 
   let lotSize = 0.1;
-  let sizingMode: 'fixed' | 'risk_percent' = 'fixed';
+  let sizingMode: OrderFormSizingMode = 'fixed';
   let riskPercent = 1;
-  let orderType: 'market' | 'limit' | 'stop' = 'market';
+  let orderType: OrderFormOrderType = 'market';
   let limitPrice = 0;
   let stopPrice = 0;
   let stopLoss = 0;
@@ -38,83 +45,15 @@
   let selectedRrPreset = 0;
   let setupTagsInput = '';
 
-  function calculateRiskAmount(entryPrice: number, side: 'buy' | 'sell'): number | undefined {
-    if (!stopLoss || stopLoss <= 0) return undefined;
-    const riskDistance = side === 'buy' ? entryPrice - stopLoss : stopLoss - entryPrice;
-    if (riskDistance <= 0) return undefined;
-    const pointValue = isIndex ? 1 : 10;
-    return riskDistance * lotSize * pointValue;
-  }
-
-  function resolveSizeAndRisk(entryPrice: number, side: 'buy' | 'sell'): { size: number; riskAmount?: number } {
-    if (sizingMode === 'fixed') {
-      return { size: lotSize, riskAmount: calculateRiskAmount(entryPrice, side) };
-    }
-
-    if (!stopLoss || stopLoss <= 0) {
-      formError = 'Risk-% mode requires stop loss.';
-      return { size: 0 };
-    }
-
-    const resolved = calculateRiskBasedSize(equity, riskPercent, entryPrice, stopLoss, currentPair);
-    return { size: resolved.size, riskAmount: resolved.riskAmount };
-  }
-
-  function resolveEntryPrice(side: 'buy' | 'sell'): number {
-    if (!currentTick) return 0;
-    if (orderType === 'limit') return limitPrice;
-    if (orderType === 'stop') return stopPrice;
-    return side === 'buy' ? currentTick.ask : currentTick.bid;
-  }
-
-  function validateOrder(
-    side: 'buy' | 'sell',
-    size: number,
-    entryPrice: number,
-    riskAmount?: number
-  ): string | null {
-    if (!currentTick) return 'No market tick available.';
-    if (!Number.isFinite(size) || size <= 0) return 'Order size must be greater than zero.';
-    if (size > MAX_POSITION_SIZE) return `Max position size is ${MAX_POSITION_SIZE} lots.`;
-
-    if (orderType === 'limit' && limitPrice <= 0) return 'Limit price is required for limit order.';
-    if (orderType === 'stop' && stopPrice <= 0) return 'Stop trigger price is required for stop order.';
-    if (orderType === 'limit' && side === 'buy' && limitPrice >= currentTick.ask) {
-      return 'Buy limit must be below current ask.';
-    }
-    if (orderType === 'limit' && side === 'sell' && limitPrice <= currentTick.bid) {
-      return 'Sell limit must be above current bid.';
-    }
-    if (orderType === 'stop' && side === 'buy' && stopPrice <= currentTick.ask) {
-      return 'Buy stop must be above current ask.';
-    }
-    if (orderType === 'stop' && side === 'sell' && stopPrice >= currentTick.bid) {
-      return 'Sell stop must be below current bid.';
-    }
-
-    const stopErr = validateStopTargets({
-      side,
-      entryPrice,
-      stopLoss: stopLoss > 0 ? stopLoss : undefined,
-      takeProfit: takeProfit > 0 ? takeProfit : undefined
-    });
-    if (stopErr) return stopErr;
-
-    if (sizingMode === 'risk_percent') {
-      const selectedRisk = (equity * riskPercent) / 100;
-      if (selectedRisk > equity) return 'Insufficient equity for selected risk.';
-    }
-
-    if (typeof riskAmount === 'number' && openRisk + riskAmount > equity) {
-      return 'Open risk plus trade risk exceeds available equity.';
-    }
-
-    return null;
-  }
-
   function applyRrPreset(side: 'buy' | 'sell') {
     if (!selectedRrPreset || !stopLoss || !currentTick) return;
-    const entry = resolveEntryPrice(side);
+    const entry = resolveEntryPrice({
+      side,
+      orderType,
+      currentTick,
+      limitPrice,
+      stopPrice
+    });
     const distance = Math.abs(entry - stopLoss);
     if (distance <= 0) return;
     takeProfit = side === 'buy'
@@ -131,9 +70,46 @@
     if (!currentTick) return;
     formError = '';
     applyRrPreset('buy');
-    const entryPrice = resolveEntryPrice('buy');
-    const { size, riskAmount } = resolveSizeAndRisk(entryPrice, 'buy');
-    const error = validateOrder('buy', size, entryPrice, riskAmount);
+    const entryPrice = resolveEntryPrice({
+      side: 'buy',
+      orderType,
+      currentTick,
+      limitPrice,
+      stopPrice
+    });
+    const resolved = resolveSizeAndRisk({
+      pair: currentPair,
+      side: 'buy',
+      sizingMode,
+      fixedSize: lotSize,
+      equity,
+      riskPercent,
+      entryPrice,
+      stopLoss
+    });
+    if (resolved.error) {
+      formError = resolved.error;
+      return;
+    }
+    const { size, riskAmount } = resolved;
+    const error = validateOrderInput({
+      side: 'buy',
+      pair: currentPair,
+      orderType,
+      size,
+      currentTick,
+      limitPrice,
+      stopPrice,
+      stopLoss: stopLoss > 0 ? stopLoss : undefined,
+      takeProfit: takeProfit > 0 ? takeProfit : undefined,
+      entryPrice,
+      openRisk,
+      equity,
+      riskAmount,
+      sizingMode,
+      riskPercent,
+      maxPositionSize: MAX_POSITION_SIZE
+    });
     if (error) {
       formError = error;
       return;
@@ -189,9 +165,46 @@
     if (!currentTick) return;
     formError = '';
     applyRrPreset('sell');
-    const entryPrice = resolveEntryPrice('sell');
-    const { size, riskAmount } = resolveSizeAndRisk(entryPrice, 'sell');
-    const error = validateOrder('sell', size, entryPrice, riskAmount);
+    const entryPrice = resolveEntryPrice({
+      side: 'sell',
+      orderType,
+      currentTick,
+      limitPrice,
+      stopPrice
+    });
+    const resolved = resolveSizeAndRisk({
+      pair: currentPair,
+      side: 'sell',
+      sizingMode,
+      fixedSize: lotSize,
+      equity,
+      riskPercent,
+      entryPrice,
+      stopLoss
+    });
+    if (resolved.error) {
+      formError = resolved.error;
+      return;
+    }
+    const { size, riskAmount } = resolved;
+    const error = validateOrderInput({
+      side: 'sell',
+      pair: currentPair,
+      orderType,
+      size,
+      currentTick,
+      limitPrice,
+      stopPrice,
+      stopLoss: stopLoss > 0 ? stopLoss : undefined,
+      takeProfit: takeProfit > 0 ? takeProfit : undefined,
+      entryPrice,
+      openRisk,
+      equity,
+      riskAmount,
+      sizingMode,
+      riskPercent,
+      maxPositionSize: MAX_POSITION_SIZE
+    });
     if (error) {
       formError = error;
       return;
@@ -524,53 +537,65 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
+    background: #0f161f;
   }
 
   .panel-header {
-    padding: 16px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: #101824;
   }
 
   .panel-header h3 {
     margin: 0;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--text-primary);
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+    color: var(--text-hi);
   }
 
   .panel-body {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .price-display {
+    flex: 1;
+    overflow: auto;
+    padding: 8px 10px 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 12px;
-    background: var(--bg-secondary);
-    border-radius: 4px;
+  }
+
+  .price-display {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    background: #101824;
   }
 
   .bid, .ask, .spread {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 3px;
+    padding: 7px 8px;
+    border-left: 1px solid rgba(51, 65, 85, 0.45);
+  }
+
+  .bid {
+    border-left: none;
   }
 
   .label {
-    font-size: 11px;
-    color: var(--text-secondary);
+    font-size: 10px;
+    letter-spacing: 0.4px;
+    color: var(--text-low);
     font-weight: 600;
   }
 
   .price {
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 600;
-    font-family: 'Courier New', monospace;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
   }
 
   .buy-price {
@@ -582,59 +607,81 @@
   }
 
   .value {
-    font-size: 13px;
-    color: var(--text-primary);
+    font-size: 11px;
+    color: var(--text-hi);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
   }
 
   .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: 128px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 1px solid rgba(51, 65, 85, 0.35);
+  }
+
+  .form-group:first-of-type {
+    border-top: 1px solid rgba(51, 65, 85, 0.45);
   }
 
   .form-group label {
-    font-size: 12px;
-    color: var(--text-secondary);
+    font-size: 10px;
+    color: var(--text-low);
     font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
   }
 
   .form-group input,
   .form-group select {
-    padding: 8px 10px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-primary);
-    font-size: 13px;
+    width: 100%;
+    padding: 7px 8px;
+    background: #111923;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-hi);
+    font-size: 11px;
   }
 
   .form-group input:focus,
   .form-group select:focus {
-    border-color: var(--accent-color);
+    border-color: var(--accent);
+    outline: 2px solid rgba(76, 141, 255, 0.4);
+    outline-offset: 1px;
   }
 
   .form-error {
-    color: var(--danger-color);
-    font-size: 12px;
+    color: var(--bear);
+    font-size: 11px;
+    padding: 6px 8px;
+    border: 1px solid rgba(240, 91, 110, 0.35);
+    background: rgba(240, 91, 110, 0.12);
   }
 
   .action-buttons {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 6px;
+    margin-top: 4px;
+    position: sticky;
+    bottom: 0;
+    padding: 8px 0 0;
+    border-top: 1px solid rgba(51, 65, 85, 0.45);
+    background: #0f161f;
+    z-index: 2;
   }
 
   .btn {
-    padding: 12px;
-    border-radius: 4px;
+    padding: 10px 8px;
     font-weight: 600;
-    font-size: 13px;
-    transition: opacity 0.2s;
+    font-size: 11px;
+    transition: filter 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
   }
 
   .btn:hover {
-    opacity: 0.85;
+    filter: brightness(1.06);
   }
 
   .btn-buy {
@@ -648,24 +695,27 @@
   }
 
   .btn-amend {
-    background: var(--accent-color);
+    background: var(--accent);
     color: white;
+    padding: 9px 10px;
+    font-size: 11px;
+    font-weight: 600;
   }
 
   .pending-orders {
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 8px;
+    border-top: 1px solid rgba(51, 65, 85, 0.45);
+    padding-top: 8px;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    background: var(--bg-secondary);
   }
 
   .pending-orders h4 {
-    margin: 0 0 6px 0;
-    font-size: 12px;
-    color: var(--text-primary);
+    margin: 0 0 4px 0;
+    font-size: 10px;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
   }
 
   .pending-row {
@@ -673,53 +723,71 @@
     grid-template-columns: auto auto 1fr auto auto;
     gap: 6px;
     align-items: center;
-    font-size: 11px;
-    color: var(--text-secondary);
-    padding: 4px;
-    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-mid);
+    padding: 6px 0;
+    border-top: 1px solid rgba(51, 65, 85, 0.3);
+  }
+
+  .pending-row:first-of-type {
+    border-top: none;
   }
 
   .pending-row.selected {
-    background: rgba(41, 98, 255, 0.2);
+    background: rgba(76, 141, 255, 0.14);
   }
 
   .btn-mini {
     font-size: 10px;
-    padding: 4px 6px;
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-radius: 4px;
+    padding: 4px 7px;
+    background: #1a2431;
+    color: var(--text-hi);
+    border-radius: 5px;
+    border: 1px solid var(--border-subtle);
   }
 
   .btn-mini.danger {
-    color: var(--danger-color);
+    color: var(--bear);
   }
 
   .account-info {
-    margin-top: 8px;
-    padding: 12px;
-    background: var(--bg-secondary);
-    border-radius: 4px;
+    margin-top: 2px;
+    border-top: 1px solid rgba(51, 65, 85, 0.45);
+    border-bottom: 1px solid rgba(51, 65, 85, 0.45);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
   }
 
   .info-row {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: 10px;
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 1px solid rgba(51, 65, 85, 0.3);
+  }
+
+  .info-row:first-child {
+    border-top: none;
   }
 
   .info-row span:first-child {
-    color: var(--text-secondary);
+    color: var(--text-low);
   }
 
   .info-row .positive {
-    color: var(--success-color);
+    color: var(--bull);
   }
 
   .info-row .negative {
-    color: var(--danger-color);
+    color: var(--bear);
+  }
+
+  @media (max-width: 1199px) {
+    .form-group {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
   }
 </style>

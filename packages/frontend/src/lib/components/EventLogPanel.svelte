@@ -39,28 +39,34 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    background: #0f161f;
   }
 
   .header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: #121b27;
   }
 
   .header h3 {
     margin: 0;
-    font-size: 13px;
-    color: var(--text-primary);
+    font-size: 11px;
+    color: var(--text-hi);
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
   }
 
   .body {
     flex: 1;
     overflow: auto;
+    min-height: 0;
   }
 
   .empty {
-    color: var(--text-secondary);
+    color: var(--text-low);
     padding: 20px;
-    font-size: 12px;
+    font-size: 11px;
   }
 
   table {
@@ -73,13 +79,23 @@
     padding: 8px 10px;
     font-size: 11px;
     text-align: left;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid rgba(38, 49, 66, 0.62);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: var(--text-hi);
   }
 
   th {
-    color: var(--text-secondary);
+    color: var(--text-low);
     position: sticky;
     top: 0;
-    background: var(--bg-secondary);
+    background: #111923;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.45px;
+    border-bottom-color: var(--border-subtle);
+  }
+
+  tbody tr:hover {
+    background: rgba(76, 141, 255, 0.06);
   }
 </style>

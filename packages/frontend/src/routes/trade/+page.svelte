@@ -12,6 +12,7 @@
   } from '$lib/engine/execution';
   import { closePosition } from '$lib/engine/pnl';
   import { calculateRiskBasedSize, validateStopTargets } from '$lib/engine/risk';
+  import { toTickDistance } from '$lib/engine/order-form-controller';
   import {
     createDefaultDrawingStyle,
     isDrawingTool
@@ -28,6 +29,7 @@
     getSessionEntities,
     getJournalEntries,
     getToolPrefs,
+    getWorkspacePrefs,
     listAllTrades,
     getSnapshot,
     listSessions,
@@ -39,7 +41,8 @@
     saveSessionEvents,
     saveSessionEntities,
     saveSnapshot,
-    saveToolPrefs
+    saveToolPrefs,
+    saveWorkspacePrefs
   } from '$lib/db/ticks';
   import type {
     BacktestSession,
@@ -48,13 +51,16 @@
     DrawingPoint,
     DrawingStyle,
     DrawingToolType,
+    RiskOverlayMetrics,
     RiskToolDraft,
     SessionEvent,
     SessionSnapshot,
     Timeframe,
-    TradingPair
+    TradingPair,
+    WorkspaceBottomTab,
+    WorkspaceRightTab
   } from '$shared/types';
-  import { PAIR_SPREADS } from '$shared/types';
+  import { PAIR_CATEGORIES, PAIR_LABELS, PAIR_SPREADS } from '$shared/types';
   import AnalyticsPanel from '$lib/components/AnalyticsPanel.svelte';
   import AccountMetricsPanel from '$lib/components/AccountMetricsPanel.svelte';
   import Chart from '$lib/components/Chart.svelte';
@@ -64,6 +70,7 @@
   import PositionTable from '$lib/components/PositionTable.svelte';
   import TradeHistory from '$lib/components/TradeHistory.svelte';
   import ReplayControls from '$lib/components/ReplayControls.svelte';
+  import PlaceOrderModal, { type SaveAndJournalPayload } from '$lib/components/PlaceOrderModal.svelte';
   import '../../app.css';
 
   const SESSION_NAME_PREFIX = 'Backtest Session';
@@ -75,7 +82,7 @@
     H4: 14_400_000,
     D1: 86_400_000
   };
-  type DockTab = 'positions' | 'trades' | 'events' | 'journal' | 'analytics';
+  const WATCHLIST_PAIRS: TradingPair[] = ['NAS100', 'US500', 'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF'];
 
   let sessions: BacktestSession[] = [];
   $: currentPair = $tradingStore.currentPair;
@@ -94,6 +101,7 @@
   $: currentIndex = $tradingStore.currentIndex;
   $: totalBars = $tradingStore.totalBars;
   $: spread = $tradingStore.spread;
+  $: currentTick = $tradingStore.currentTick;
   $: equity = $tradingStore.equity;
   $: sessionEvents = $tradingStore.sessionEvents;
   $: drawings = $tradingStore.drawings;
@@ -102,6 +110,12 @@
   $: magnetEnabled = $tradingStore.magnetEnabled;
   $: drawingsVisible = $tradingStore.drawingsVisible;
   $: toolStylePresets = $tradingStore.toolStylePresets;
+  $: watchlistVisible = $tradingStore.watchlistVisible;
+  $: rightDrawerOpen = $tradingStore.rightDrawerOpen;
+  $: rightDrawerTab = $tradingStore.rightDrawerTab;
+  $: bottomDrawerOpen = $tradingStore.bottomDrawerOpen;
+  $: bottomDrawerTab = $tradingStore.bottomDrawerTab;
+  $: compactToolbar = $tradingStore.compactToolbar;
   $: selectedDrawing = selectedDrawingId
     ? drawings.find((drawing) => drawing.id === selectedDrawingId) ?? null
     : null;
@@ -120,7 +134,6 @@
   let isBootstrapping = true;
   let lastAnalyticsTradeCount = -1;
   let latestLoadRequestId = 0;
-  let activeDockTab: DockTab = 'positions';
   let drawingPersistTimer: ReturnType<typeof setTimeout> | null = null;
   let riskDraftSeed: DrawingPoint | null = null;
   let riskDraft: RiskToolDraft | null = null;
@@ -130,29 +143,44 @@
   let riskLotSize = 0.1;
   let riskPercent = 1;
   let riskTakeProfit = '';
+  let riskOverlayMetrics: RiskOverlayMetrics | null = null;
+  let placeOrderOpen = false;
+  let journalPrefill: {
+    id: string;
+    setupTags: string[];
+    notes: string;
+    confidence: number;
+    checklist: string;
+    tradeId?: string;
+  } | null = null;
 
-  const chartTools: Array<{ id: DrawingToolType; label: string }> = [
-    { id: 'cursor', label: 'Cursor' },
-    { id: 'trend_line', label: 'Trend' },
-    { id: 'horizontal_line', label: 'HLine' },
-    { id: 'vertical_line', label: 'VLine' },
-    { id: 'ray', label: 'Ray' },
-    { id: 'extended_line', label: 'Ext' },
-    { id: 'rectangle', label: 'Rect' },
-    { id: 'text', label: 'Text' },
-    { id: 'arrow', label: 'Arrow' },
-    { id: 'ruler', label: 'Ruler' },
-    { id: 'fibonacci', label: 'Fib' },
-    { id: 'brush', label: 'Brush' },
-    { id: 'risk_position', label: 'Risk' }
+  const chartTools: Array<{ id: DrawingToolType; label: string; icon: string }> = [
+    { id: 'cursor', label: 'Cursor', icon: '⌖' },
+    { id: 'trend_line', label: 'Trend', icon: '╱' },
+    { id: 'horizontal_line', label: 'Horizontal', icon: '═' },
+    { id: 'vertical_line', label: 'Vertical', icon: '║' },
+    { id: 'ray', label: 'Ray', icon: '➤' },
+    { id: 'extended_line', label: 'Extended', icon: '⟷' },
+    { id: 'rectangle', label: 'Rectangle', icon: '▭' },
+    { id: 'text', label: 'Text', icon: 'T' },
+    { id: 'arrow', label: 'Arrow', icon: '➜' },
+    { id: 'ruler', label: 'Ruler', icon: '⌗' },
+    { id: 'fibonacci', label: 'Fibonacci', icon: 'Φ' },
+    { id: 'brush', label: 'Brush', icon: '✎' },
+    { id: 'risk_position', label: 'Risk', icon: 'R' }
   ];
 
-  const dockTabs: Array<{ id: DockTab; label: string }> = [
+  const dockTabs: Array<{ id: WorkspaceBottomTab; label: string }> = [
     { id: 'positions', label: 'Positions' },
     { id: 'trades', label: 'Trades' },
     { id: 'events', label: 'Events' },
     { id: 'journal', label: 'Journal' },
     { id: 'analytics', label: 'Analytics' }
+  ];
+  const rightDrawerTabs: Array<{ id: WorkspaceRightTab; label: string; icon: string }> = [
+    { id: 'order', label: 'Order', icon: '◎' },
+    { id: 'risk', label: 'Risk', icon: 'R' },
+    { id: 'account', label: 'Account', icon: '◌' }
   ];
 
   type LoadDataOverrides = Partial<{
@@ -217,12 +245,102 @@
     });
   }
 
-  function dockCount(tab: DockTab): number {
+  function formatPairPrice(value: number): string {
+    const digits = PAIR_CATEGORIES[currentPair] === 'index' ? 3 : 5;
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
+  }
+
+  function formatMoney(value: number): string {
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function formatTicks(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) return '--';
+    const digits = PAIR_CATEGORIES[currentPair] === 'index' ? 3 : 1;
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
+  }
+
+  function formatSpread(pair: TradingPair): string {
+    const spreadValue = PAIR_SPREADS[pair];
+    const decimals = pair === 'NAS100' || pair === 'US500' ? 2 : 5;
+    return spreadValue.toFixed(decimals);
+  }
+
+  function dockCount(tab: WorkspaceBottomTab): number {
     if (tab === 'positions') return positions.length;
     if (tab === 'trades') return trades.length;
     if (tab === 'events') return sessionEvents.length;
     if (tab === 'journal') return $tradingStore.journalEntries.length;
     return analyticsSnapshot ? analyticsSnapshot.totalTrades : 0;
+  }
+
+  function applyWorkspacePrefs(prefs?: {
+    watchlistVisible?: boolean;
+    rightDrawerOpen?: boolean;
+    rightDrawerTab?: WorkspaceRightTab;
+    bottomDrawerOpen?: boolean;
+    bottomDrawerTab?: WorkspaceBottomTab;
+    compactToolbar?: boolean;
+  }) {
+    tradingStore.setWatchlistVisible(prefs?.watchlistVisible ?? true);
+    tradingStore.setRightDrawerOpen(prefs?.rightDrawerOpen ?? true);
+    tradingStore.setRightDrawerTab(prefs?.rightDrawerTab ?? 'order');
+    tradingStore.setBottomDrawerOpen(prefs?.bottomDrawerOpen ?? true);
+    tradingStore.setBottomDrawerTab(prefs?.bottomDrawerTab ?? 'positions');
+    tradingStore.setCompactToolbar(prefs?.compactToolbar ?? false);
+  }
+
+  async function persistWorkspacePrefs(targetSessionId = sessionId) {
+    if (!targetSessionId) return;
+    await saveWorkspacePrefs(targetSessionId, {
+      watchlistVisible,
+      rightDrawerOpen,
+      rightDrawerTab,
+      bottomDrawerOpen,
+      bottomDrawerTab,
+      compactToolbar
+    });
+  }
+
+  function toggleWatchlist() {
+    tradingStore.setWatchlistVisible(!watchlistVisible);
+    void persistWorkspacePrefs();
+  }
+
+  function toggleCompactToolbar() {
+    tradingStore.setCompactToolbar(!compactToolbar);
+    void persistWorkspacePrefs();
+  }
+
+  function setBottomDrawerTab(tab: WorkspaceBottomTab) {
+    tradingStore.setBottomDrawerOpen(true);
+    tradingStore.setBottomDrawerTab(tab);
+    void persistWorkspacePrefs();
+  }
+
+  function toggleBottomDrawer() {
+    tradingStore.setBottomDrawerOpen(!bottomDrawerOpen);
+    void persistWorkspacePrefs();
+  }
+
+  function setRightDrawerTab(tab: WorkspaceRightTab) {
+    tradingStore.setRightDrawerOpen(true);
+    tradingStore.setRightDrawerTab(tab);
+    void persistWorkspacePrefs();
+  }
+
+  function toggleRightDrawer() {
+    tradingStore.setRightDrawerOpen(!rightDrawerOpen);
+    void persistWorkspacePrefs();
   }
 
   function queueDrawingPersist(targetSessionId = sessionId, targetPair = currentPair) {
@@ -246,6 +364,10 @@
       riskDraftSeed = null;
       riskDraft = null;
       riskPanelError = '';
+    } else {
+      tradingStore.setRightDrawerOpen(true);
+      tradingStore.setRightDrawerTab('risk');
+      void persistWorkspacePrefs();
     }
     void persistToolPrefs();
   }
@@ -412,6 +534,112 @@
     riskDraftSeed = null;
   }
 
+  function applyRiskTakeProfitInput(value: string) {
+    riskTakeProfit = value;
+    if (!riskDraft) return;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      riskDraft = {
+        ...riskDraft,
+        takeProfit: null
+      };
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    riskDraft = {
+      ...riskDraft,
+      takeProfit: {
+        timestamp: riskDraft.entry.timestamp,
+        price: parsed
+      }
+    };
+  }
+
+  function handleRiskDraftAdjust(patch: Partial<RiskToolDraft>) {
+    if (!riskDraft) return;
+    const nextEntry = patch.entry ?? riskDraft.entry;
+    const nextStop = patch.stop ?? riskDraft.stop;
+    const nextTakeProfit =
+      patch.takeProfit === undefined ? riskDraft.takeProfit ?? null : patch.takeProfit ?? null;
+    const nextSide = deriveRiskSide(nextEntry.price, nextStop.price);
+
+    riskDraft = {
+      ...riskDraft,
+      ...patch,
+      entry: nextEntry,
+      stop: nextStop,
+      takeProfit: nextTakeProfit,
+      side: nextSide
+    };
+    riskTakeProfit = nextTakeProfit ? String(nextTakeProfit.price) : '';
+  }
+
+  function deriveRiskOverlayMetrics(): RiskOverlayMetrics | null {
+    if (!riskDraft) return null;
+
+    const entryPrice = riskDraft.entry.price;
+    const stopPrice = riskDraft.stop.price;
+    const targetPrice = riskDraft.takeProfit?.price ?? null;
+    const riskDistance = Math.abs(entryPrice - stopPrice);
+    if (!Number.isFinite(riskDistance) || riskDistance <= 0 || entryPrice <= 0) return null;
+
+    let resolvedSize = riskLotSize;
+    if (riskSizingMode === 'risk_percent') {
+      resolvedSize = calculateRiskBasedSize(equity, riskPercent, entryPrice, stopPrice, currentPair).size;
+    }
+    if (!Number.isFinite(resolvedSize) || resolvedSize <= 0) {
+      resolvedSize = 0;
+    }
+
+    const pointValue = PAIR_CATEGORIES[currentPair] === 'index' ? 1 : 10;
+    const riskAmount = riskDistance * resolvedSize * pointValue;
+    const rewardDistance = targetPrice !== null ? Math.abs(targetPrice - entryPrice) : null;
+    const targetAmount = rewardDistance !== null ? rewardDistance * resolvedSize * pointValue : null;
+    const rewardRatio =
+      rewardDistance !== null && riskDistance > 0 ? rewardDistance / riskDistance : null;
+    const ticksToStop = toTickDistance(currentPair, riskDistance);
+    const ticksToTarget = rewardDistance !== null ? toTickDistance(currentPair, rewardDistance) : null;
+    const pctToStop = (riskDistance / Math.abs(entryPrice)) * 100;
+    const pctToTarget =
+      rewardDistance !== null ? (rewardDistance / Math.abs(entryPrice)) * 100 : null;
+    const markPrice = currentTick
+      ? (riskDraft.side === 'buy' ? currentTick.bid : currentTick.ask)
+      : (currentBar?.close ?? entryPrice);
+    const direction = riskDraft.side === 'buy' ? 1 : -1;
+    const openPnlEstimate = (markPrice - entryPrice) * direction * resolvedSize * pointValue;
+
+    const topLabel =
+      targetPrice === null
+        ? 'Target: -- (-- ) --, Amount: --'
+        : `Target: ${formatTicks(ticksToTarget)} (${pctToTarget?.toFixed(2)}%) ${formatPairPrice(targetPrice)}, Amount: ${formatMoney(targetAmount ?? 0)}`;
+    const middleLabel = `Open P&L: ${openPnlEstimate >= 0 ? '+' : ''}${formatMoney(openPnlEstimate)}, Qty: ${resolvedSize.toFixed(2)}${
+      rewardRatio === null ? ', Risk/Reward Ratio: --' : `, Risk/Reward Ratio: ${rewardRatio.toFixed(2)}`
+    }`;
+    const bottomLabel = `Stop: ${formatTicks(ticksToStop)} (${pctToStop.toFixed(2)}%) ${formatPairPrice(stopPrice)}, Amount: ${formatMoney(riskAmount)}`;
+
+    return {
+      side: riskDraft.side,
+      size: resolvedSize,
+      openPnlEstimate,
+      rewardRatio,
+      riskAmount,
+      targetAmount,
+      ticksToStop,
+      ticksToTarget,
+      pctToStop,
+      pctToTarget,
+      entryPrice,
+      stopPrice,
+      targetPrice,
+      topLabel,
+      middleLabel,
+      bottomLabel
+    };
+  }
+
+  $: riskOverlayMetrics = deriveRiskOverlayMetrics();
+
   function cancelRiskDraft() {
     riskDraft = null;
     riskDraftSeed = null;
@@ -420,6 +648,36 @@
       tradingStore.setActiveTool('cursor');
       void persistToolPrefs();
     }
+  }
+
+  function openPlaceOrderModal() {
+    placeOrderOpen = true;
+  }
+
+  function closePlaceOrderModal() {
+    placeOrderOpen = false;
+  }
+
+  function handleSaveAndJournal(payload: SaveAndJournalPayload) {
+    const tags = [currentPair, currentTimeframe, payload.side, payload.orderType];
+    const checklist = [
+      `Pair: ${currentPair}`,
+      `Timeframe: ${currentTimeframe}`,
+      `Side: ${payload.side.toUpperCase()}`,
+      `Type: ${payload.orderType.toUpperCase()}`,
+      `Size: ${payload.size.toFixed(2)}`,
+      `Risk %: ${payload.riskPercent.toFixed(2)}`
+    ];
+    journalPrefill = {
+      id: `prefill_${Date.now()}`,
+      setupTags: tags,
+      notes: `Planned ${payload.side.toUpperCase()} ${payload.orderType.toUpperCase()} @ ${formatPairPrice(payload.entryPrice)} | SL ${payload.stopLoss ? formatPairPrice(payload.stopLoss) : '--'} | TP ${payload.takeProfit ? formatPairPrice(payload.takeProfit) : '--'}`,
+      confidence: 3,
+      checklist: checklist.join('\n')
+    };
+    tradingStore.setBottomDrawerOpen(true);
+    tradingStore.setBottomDrawerTab('journal');
+    void persistWorkspacePrefs();
   }
 
   function resolveReplayMarketContext() {
@@ -434,6 +692,9 @@
     if (!riskDraft) return;
     riskPanelError = '';
     const market = resolveReplayMarketContext();
+    const takeProfit =
+      riskDraft.takeProfit?.price ??
+      (riskTakeProfit.trim().length > 0 ? Number(riskTakeProfit) : undefined);
 
     const intent = buildChartEntryIntent({
       draft: riskDraft,
@@ -446,7 +707,7 @@
       side: intent.side,
       entryPrice: intent.entryPrice,
       stopLoss: riskDraft.stop.price,
-      takeProfit: riskTakeProfit ? Number(riskTakeProfit) : undefined
+      takeProfit
     });
 
     if (stopValidation) {
@@ -475,8 +736,8 @@
       return;
     }
 
-    const riskAmount = Math.abs(intent.entryPrice - riskDraft.stop.price) * size;
-    const takeProfit = riskTakeProfit ? Number(riskTakeProfit) : undefined;
+    const riskAmount =
+      riskOverlayMetrics?.riskAmount ?? Math.abs(intent.entryPrice - riskDraft.stop.price) * size;
 
     if (riskOrderType === 'market') {
       const position = executeMarketOrder(
@@ -518,9 +779,9 @@
       side: intent.side,
       orderType: riskOrderType,
       entryPrice: intent.entryPrice,
-      stopLoss: riskDraft.stop.price,
-      takeProfit: takeProfit ?? null,
-      size
+        stopLoss: riskDraft.stop.price,
+        takeProfit: takeProfit ?? null,
+        size
     });
     riskDraft = null;
     riskDraftSeed = null;
@@ -626,6 +887,7 @@
     await saveSessionEvents(sessionId, sessionEvents);
     await saveDrawings(sessionId, currentPair, drawings);
     await persistToolPrefs(sessionId);
+    await persistWorkspacePrefs(sessionId);
 
     const snapshot: SessionSnapshot = {
       sessionId,
@@ -651,12 +913,13 @@
 
     tradingStore.applySession(session);
 
-    const [snapshot, entities, events, journalEntries, prefs] = await Promise.all([
+    const [snapshot, entities, events, journalEntries, prefs, workspacePrefs] = await Promise.all([
       getSnapshot(targetSessionId),
       getSessionEntities(targetSessionId),
       getSessionEvents(targetSessionId),
       getJournalEntries(targetSessionId),
-      getToolPrefs(targetSessionId)
+      getToolPrefs(targetSessionId),
+      getWorkspacePrefs(targetSessionId)
     ]);
 
     orderBook.replaceAll(entities.orders);
@@ -672,7 +935,12 @@
       tradingStore.setMagnetEnabled(prefs.magnetEnabled);
       tradingStore.setDrawingsVisible(prefs.drawingsVisible);
       tradingStore.setToolStylePresets(prefs.stylePresets);
+    } else {
+      tradingStore.setActiveTool('cursor');
+      tradingStore.setMagnetEnabled(false);
+      tradingStore.setDrawingsVisible(true);
     }
+    applyWorkspacePrefs(workspacePrefs);
 
     if (snapshot) {
       tradingStore.setBalance(snapshot.balance);
@@ -1091,11 +1359,35 @@
 
   // Keyboard shortcuts
   function handleKeydown(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLSelectElement ||
+      e.target instanceof HTMLTextAreaElement
+    ) {
+      return;
+    }
+
+    if (e.key === 'Escape' && placeOrderOpen) {
+      e.preventDefault();
+      closePlaceOrderModal();
+      return;
+    }
 
     if (e.key === ' ') {
       e.preventDefault();
       handlePlayPause();
+    } else if (e.key === 'b') {
+      e.preventDefault();
+      toggleBottomDrawer();
+    } else if (e.key === 'w') {
+      e.preventDefault();
+      toggleWatchlist();
+    } else if (e.key === 'o') {
+      e.preventDefault();
+      toggleRightDrawer();
+    } else if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      openPlaceOrderModal();
     } else if (e.key === 'Escape' && (riskDraft || riskDraftSeed)) {
       e.preventDefault();
       cancelRiskDraft();
@@ -1105,7 +1397,7 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="app-container">
+<div class="app-container tradingview-shell" class:bottom-open={bottomDrawerOpen}>
   <div class="header terminal-header">
     <div class="control-strip">
       <div class="brand-block">
@@ -1114,6 +1406,28 @@
           <span>{sessionName}</span>
           <span>{activeTimestampLabel}</span>
         </div>
+      </div>
+      <div class="workspace-actions mono">
+        <button class="quick-toggle icon-only" class:active={watchlistVisible} on:click={toggleWatchlist} title="Toggle watchlist (W)">
+          <span aria-hidden="true">≡</span>
+          <span class="sr-only">Watchlist</span>
+        </button>
+        <button class="quick-toggle icon-only" class:active={rightDrawerOpen} on:click={toggleRightDrawer} title="Toggle right panel (O)">
+          <span aria-hidden="true">◫</span>
+          <span class="sr-only">Right panel</span>
+        </button>
+        <button class="quick-toggle icon-only" class:active={bottomDrawerOpen} on:click={toggleBottomDrawer} title="Toggle bottom panel (B)">
+          <span aria-hidden="true">▤</span>
+          <span class="sr-only">Bottom panel</span>
+        </button>
+        <button class="quick-toggle icon-only" class:active={compactToolbar} on:click={toggleCompactToolbar} title="Toggle compact toolbar">
+          <span aria-hidden="true">▦</span>
+          <span class="sr-only">Compact mode</span>
+        </button>
+        <button class="quick-toggle accent" on:click={openPlaceOrderModal} title="Place order (P)">
+          <span aria-hidden="true">◎</span>
+          Place
+        </button>
       </div>
       <ReplayControls
         onPlayPause={handlePlayPause}
@@ -1128,6 +1442,7 @@
         onLoadSession={loadSession}
         {sessions}
         activeSessionId={sessionId}
+        dense={compactToolbar}
       />
       <div class="header-metrics mono">
         <span>Balance ${balance.toFixed(2)}</span>
@@ -1140,7 +1455,25 @@
     </div>
   </div>
 
-  <div class="main-content">
+  <div class="main-content workspace-grid" class:with-watchlist={watchlistVisible} class:with-right-drawer={rightDrawerOpen}>
+    {#if watchlistVisible}
+      <aside class="watchlist-panel">
+        <div class="watchlist-head">
+          <span>Watchlist</span>
+          <button class="icon-inline" on:click={toggleWatchlist} title="Hide watchlist">✕</button>
+        </div>
+        <div class="watchlist-body">
+          {#each WATCHLIST_PAIRS as pair}
+            <button class="watch-item mono" class:active={currentPair === pair} on:click={() => void handlePairChange(pair)}>
+              <span class="watch-symbol">{pair}</span>
+              <span>{PAIR_LABELS[pair]}</span>
+              <span class="watch-spread">Spr {formatSpread(pair)}</span>
+            </button>
+          {/each}
+        </div>
+      </aside>
+    {/if}
+
     <div class="chart-area">
       <div class="chart-shell">
         <div class="chart-shell-head">
@@ -1154,11 +1487,16 @@
               </span>
             {/if}
           </div>
-          {#if warningMessage}
-            <span class="warning-pill">Data Warning</span>
-          {:else}
-            <span class="ok-pill">Feed Healthy</span>
-          {/if}
+          <div class="status-strip">
+            {#if warningMessage}
+              <span class="warning-pill">⚠ Data</span>
+            {:else}
+              <span class="ok-pill">● Live</span>
+            {/if}
+            <button class="panel-toggle mono" on:click={() => setBottomDrawerTab('events')}>
+              ◴ {sessionEvents.length}
+            </button>
+          </div>
         </div>
 
         {#if isLoading}
@@ -1183,16 +1521,19 @@
                     class="tool-btn mono"
                     class:active={activeTool === tool.id}
                     on:click={() => handleToolSelect(tool.id)}
-                    title={tool.id}
+                    title={tool.label}
                   >
-                    {tool.label}
+                    <span aria-hidden="true">{tool.icon}</span>
+                    <span class="sr-only">{tool.label}</span>
                   </button>
                 {/each}
-                <button class="tool-btn mono" class:active={magnetEnabled} on:click={handleToggleMagnet}>
-                  Magnet
+                <button class="tool-btn mono" class:active={magnetEnabled} on:click={handleToggleMagnet} title="Magnet mode">
+                  <span aria-hidden="true">⌁</span>
+                  <span class="sr-only">Magnet</span>
                 </button>
-                <button class="tool-btn mono" class:active={drawingsVisible} on:click={handleToggleDrawingsVisible}>
-                  Show
+                <button class="tool-btn mono" class:active={drawingsVisible} on:click={handleToggleDrawingsVisible} title="Toggle drawings">
+                  <span aria-hidden="true">◉</span>
+                  <span class="sr-only">Show drawings</span>
                 </button>
                 <button
                   class="tool-btn mono danger"
@@ -1204,25 +1545,32 @@
                     queueDrawingPersist();
                   }}
                   disabled={drawings.length === 0}
+                  title="Clear drawings"
                 >
-                  Clear
+                  <span aria-hidden="true">⌫</span>
+                  <span class="sr-only">Clear</span>
                 </button>
 
                 <div class="tool-divider"></div>
-                <button class="tool-btn mono" on:click={duplicateSelectedDrawing} disabled={!selectedDrawing}>
-                  Duplicate
+                <button class="tool-btn mono" on:click={duplicateSelectedDrawing} disabled={!selectedDrawing} title="Duplicate selection">
+                  <span aria-hidden="true">⧉</span>
+                  <span class="sr-only">Duplicate</span>
                 </button>
-                <button class="tool-btn mono" on:click={toggleSelectedDrawingLock} disabled={!selectedDrawing}>
-                  {selectedDrawing?.locked ? 'Unlock' : 'Lock'}
+                <button class="tool-btn mono" on:click={toggleSelectedDrawingLock} disabled={!selectedDrawing} title={selectedDrawing?.locked ? 'Unlock' : 'Lock'}>
+                  <span aria-hidden="true">{selectedDrawing?.locked ? '⌧' : '⌂'}</span>
+                  <span class="sr-only">{selectedDrawing?.locked ? 'Unlock' : 'Lock'}</span>
                 </button>
-                <button class="tool-btn mono" on:click={toggleSelectedDrawingHidden} disabled={!selectedDrawing}>
-                  {selectedDrawing?.hidden ? 'Unhide' : 'Hide'}
+                <button class="tool-btn mono" on:click={toggleSelectedDrawingHidden} disabled={!selectedDrawing} title={selectedDrawing?.hidden ? 'Unhide' : 'Hide'}>
+                  <span aria-hidden="true">{selectedDrawing?.hidden ? '◉' : '○'}</span>
+                  <span class="sr-only">{selectedDrawing?.hidden ? 'Unhide' : 'Hide'}</span>
                 </button>
-                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('front')} disabled={!selectedDrawing}>
-                  Front
+                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('front')} disabled={!selectedDrawing} title="Bring to front">
+                  <span aria-hidden="true">↥</span>
+                  <span class="sr-only">Front</span>
                 </button>
-                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('back')} disabled={!selectedDrawing}>
-                  Back
+                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('back')} disabled={!selectedDrawing} title="Send to back">
+                  <span aria-hidden="true">↧</span>
+                  <span class="sr-only">Back</span>
                 </button>
 
                 <div class="tool-divider"></div>
@@ -1301,11 +1649,13 @@
                   positions={positions}
                   {riskDraft}
                   riskDraftSeed={riskDraftSeed}
+                  {riskOverlayMetrics}
                   onCreateDrawing={handleCreateDrawing}
                   onUpdateDrawing={handleUpdateDrawing}
                   onDeleteDrawing={handleDeleteDrawing}
                   onSelectDrawing={(drawingId) => tradingStore.setSelectedDrawing(drawingId)}
                   onRiskDraftPoint={handleRiskDraftPoint}
+                  onRiskDraftAdjust={handleRiskDraftAdjust}
                   onPositionLevelDrag={handlePositionLevelDrag}
                 />
               {/key}
@@ -1315,133 +1665,196 @@
             <span>{activeTimestampLabel}</span>
             <span>Progress {replayProgressPct.toFixed(1)}%</span>
             <span>Spread {spread.toFixed(2)}</span>
+            <button class="panel-toggle mono" on:click={() => setBottomDrawerTab('positions')}>
+              ◫ {positions.length}
+            </button>
           </div>
-
-          {#if riskDraft}
-            <div class="risk-panel">
-              <div class="risk-panel-head">
-                <strong>Risk Entry</strong>
-                <span class="mono">{riskDraft.side.toUpperCase()}</span>
-              </div>
-              <div class="risk-panel-grid">
-                <label>
-                  Side
-                  <select bind:value={riskDraft.side}>
-                    <option value="buy">Buy</option>
-                    <option value="sell">Sell</option>
-                  </select>
-                </label>
-                <label>
-                  Type
-                  <select bind:value={riskOrderType}>
-                    <option value="market">Market</option>
-                    <option value="limit">Limit</option>
-                    <option value="stop">Stop</option>
-                  </select>
-                </label>
-                <label>
-                  Size Mode
-                  <select bind:value={riskSizingMode}>
-                    <option value="fixed">Fixed</option>
-                    <option value="risk_percent">Risk %</option>
-                  </select>
-                </label>
-                {#if riskSizingMode === 'fixed'}
-                  <label>
-                    Lot Size
-                    <input type="number" min="0.01" step="0.01" bind:value={riskLotSize} />
-                  </label>
-                {:else}
-                  <label>
-                    Risk %
-                    <input type="number" min="0.1" step="0.1" bind:value={riskPercent} />
-                  </label>
-                {/if}
-                <label>
-                  Entry
-                  <input type="number" step="0.01" value={riskDraft.entry.price.toFixed(2)} readonly />
-                </label>
-                <label>
-                  Stop
-                  <input type="number" step="0.01" value={riskDraft.stop.price.toFixed(2)} readonly />
-                </label>
-                <label>
-                  TP (optional)
-                  <input type="number" step="0.01" bind:value={riskTakeProfit} placeholder="none" />
-                </label>
-              </div>
-              {#if riskPanelError}
-                <p class="risk-error">{riskPanelError}</p>
-              {/if}
-              <div class="risk-panel-actions">
-                <button class="tool-btn mono" on:click={confirmRiskDraft}>Confirm</button>
-                <button class="tool-btn mono" on:click={cancelRiskDraft}>Cancel</button>
-              </div>
-            </div>
-          {/if}
         {/if}
       </div>
     </div>
 
-    <div class="side-panel right-rail">
-      <div class="rail-head">
-        <span>Trade Ticket</span>
-        <span class="mono">{currentPair} {currentTimeframe}</span>
-      </div>
-      <OrderPanel onSessionEvent={appendSessionEvent} />
-      <AccountMetricsPanel />
-    </div>
+    {#if rightDrawerOpen}
+      <aside class="side-panel right-rail">
+        <div class="rail-head">
+          <div class="rail-tabs">
+            {#each rightDrawerTabs as tab}
+              <button class="rail-tab" class:active={rightDrawerTab === tab.id} on:click={() => setRightDrawerTab(tab.id)}>
+                <span aria-hidden="true">{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            {/each}
+          </div>
+          <button class="icon-inline" on:click={toggleRightDrawer} title="Close right panel">✕</button>
+        </div>
+        {#if rightDrawerTab === 'order'}
+          <div class="rail-pane">
+            <div class="rail-order-head">
+              <span class="mono">Quick Edit</span>
+              <button class="panel-toggle mono" on:click={openPlaceOrderModal} title="Open full place order ticket (P)">
+                ◎ Place
+              </button>
+            </div>
+            <OrderPanel onSessionEvent={appendSessionEvent} />
+          </div>
+        {:else if rightDrawerTab === 'account'}
+          <div class="rail-pane">
+            <AccountMetricsPanel />
+          </div>
+        {:else}
+          <div class="rail-pane risk-pane">
+            {#if riskDraft}
+              <div class="risk-panel">
+                <div class="risk-panel-head">
+                  <strong>Risk Entry</strong>
+                  <span class="mono">{riskDraft.side.toUpperCase()}</span>
+                </div>
+                <div class="risk-panel-grid">
+                  <label>
+                    Side
+                    <select bind:value={riskDraft.side}>
+                      <option value="buy">Buy</option>
+                      <option value="sell">Sell</option>
+                    </select>
+                  </label>
+                  <label>
+                    Type
+                    <select bind:value={riskOrderType}>
+                      <option value="market">Market</option>
+                      <option value="limit">Limit</option>
+                      <option value="stop">Stop</option>
+                    </select>
+                  </label>
+                  <label>
+                    Size Mode
+                    <select bind:value={riskSizingMode}>
+                      <option value="fixed">Fixed</option>
+                      <option value="risk_percent">Risk %</option>
+                    </select>
+                  </label>
+                  {#if riskSizingMode === 'fixed'}
+                    <label>
+                      Lot Size
+                      <input type="number" min="0.01" step="0.01" bind:value={riskLotSize} />
+                    </label>
+                  {:else}
+                    <label>
+                      Risk %
+                      <input type="number" min="0.1" step="0.1" bind:value={riskPercent} />
+                    </label>
+                  {/if}
+                  <label>
+                    Entry
+                    <input type="number" step="0.01" value={riskDraft.entry.price.toFixed(2)} readonly />
+                  </label>
+                  <label>
+                    Stop
+                    <input type="number" step="0.01" value={riskDraft.stop.price.toFixed(2)} readonly />
+                  </label>
+                  <label>
+                    TP (optional)
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={riskTakeProfit}
+                      on:input={(event) => applyRiskTakeProfitInput((event.currentTarget as HTMLInputElement).value)}
+                      placeholder="none"
+                    />
+                  </label>
+                </div>
+                {#if riskOverlayMetrics}
+                  <div class="risk-summary mono">
+                    <span>Risk ${formatMoney(riskOverlayMetrics.riskAmount)}</span>
+                    <span>Qty {riskOverlayMetrics.size.toFixed(2)}</span>
+                    <span>
+                      RR {riskOverlayMetrics.rewardRatio === null ? '--' : riskOverlayMetrics.rewardRatio.toFixed(2)}
+                    </span>
+                  </div>
+                {/if}
+                {#if riskPanelError}
+                  <p class="risk-error">{riskPanelError}</p>
+                {/if}
+                <div class="risk-panel-actions">
+                  <button class="tool-btn mono" on:click={confirmRiskDraft}>Confirm</button>
+                  <button class="tool-btn mono" on:click={cancelRiskDraft}>Cancel</button>
+                </div>
+              </div>
+            {:else}
+              <div class="risk-hint">
+                <h3>Risk Tool</h3>
+                <p>Select Risk from the chart toolbar, then click entry and stop on chart.</p>
+                <button class="panel-toggle mono" on:click={() => handleToolSelect('risk_position')}>
+                  Enable Risk Tool
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </aside>
+    {/if}
   </div>
 
-  <div class="bottom-panel">
+  <div class="bottom-panel" class:collapsed={!bottomDrawerOpen}>
     <div class="dock-tabs">
       {#each dockTabs as tab}
-        <button
-          class="dock-tab"
-          class:active={activeDockTab === tab.id}
-          on:click={() => (activeDockTab = tab.id)}
-        >
+        <button class="dock-tab" class:active={bottomDrawerTab === tab.id} on:click={() => setBottomDrawerTab(tab.id)}>
           {tab.label}
           <span class="dock-count mono">{dockCount(tab.id)}</span>
         </button>
       {/each}
+      <button class="dock-tab dock-collapse" on:click={toggleBottomDrawer}>
+        {bottomDrawerOpen ? 'Hide' : 'Show'}
+      </button>
     </div>
 
-    <div class="dock-body">
-      <section class="dock-panel" class:active={activeDockTab === 'positions'}>
-        <PositionTable onSessionEvent={appendSessionEvent} />
-      </section>
-      <section class="dock-panel" class:active={activeDockTab === 'trades'}>
-        <TradeHistory />
-      </section>
-      <section class="dock-panel" class:active={activeDockTab === 'events'}>
-        <EventLogPanel events={sessionEvents} />
-      </section>
-      <section class="dock-panel" class:active={activeDockTab === 'journal'}>
-        <JournalPanel onSaveEntry={handleSaveJournalEntry} />
-      </section>
-      <section class="dock-panel" class:active={activeDockTab === 'analytics'}>
-        <AnalyticsPanel
-          snapshot={analyticsSnapshot}
-          crossSession={crossSessionAnalytics}
-          onExportCsv={exportSessionCsv}
-          onExportJson={exportSessionJson}
-        />
-      </section>
-    </div>
+    {#if bottomDrawerOpen}
+      <div class="dock-body">
+        <section class="dock-panel" class:active={bottomDrawerTab === 'positions'}>
+          <PositionTable onSessionEvent={appendSessionEvent} />
+        </section>
+        <section class="dock-panel" class:active={bottomDrawerTab === 'trades'}>
+          <TradeHistory />
+        </section>
+        <section class="dock-panel" class:active={bottomDrawerTab === 'events'}>
+          <EventLogPanel events={sessionEvents} />
+        </section>
+        <section class="dock-panel" class:active={bottomDrawerTab === 'journal'}>
+          <JournalPanel onSaveEntry={handleSaveJournalEntry} prefill={journalPrefill} />
+        </section>
+        <section class="dock-panel" class:active={bottomDrawerTab === 'analytics'}>
+          <AnalyticsPanel
+            snapshot={analyticsSnapshot}
+            crossSession={crossSessionAnalytics}
+            onExportCsv={exportSessionCsv}
+            onExportJson={exportSessionJson}
+          />
+        </section>
+      </div>
+    {/if}
   </div>
+
+  <PlaceOrderModal
+    open={placeOrderOpen}
+    seedDraft={riskDraft}
+    onClose={closePlaceOrderModal}
+    onSessionEvent={appendSessionEvent}
+    onSaveAndJournal={handleSaveAndJournal}
+  />
 </div>
 
 <style>
-  .app-container {
-    grid-template-rows: 64px minmax(0, 1fr) 230px;
+  .tradingview-shell {
+    grid-template-rows: 74px minmax(0, 1fr) 46px;
+    transition: grid-template-rows 0.2s ease;
+  }
+
+  .tradingview-shell.bottom-open {
+    grid-template-rows: 74px minmax(0, 1fr) 230px;
   }
 
   .terminal-header {
-    padding: 0 10px;
-    display: flex;
-    align-items: center;
-    border-bottom-color: rgba(71, 85, 105, 0.5);
+    padding: 0 8px;
+    border-bottom-color: rgba(98, 124, 158, 0.24);
+    background: linear-gradient(180deg, rgba(15, 24, 35, 0.98), rgba(11, 18, 28, 0.94));
   }
 
   .control-strip {
@@ -1457,16 +1870,16 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
-    min-width: 150px;
+    gap: 3px;
+    min-width: 170px;
   }
 
   .brand-block h1 {
     margin: 0;
     font-size: 13px;
     font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: 0.2px;
+    letter-spacing: 0.3px;
+    color: #eaf0fb;
   }
 
   .brand-sub {
@@ -1474,17 +1887,85 @@
     align-items: center;
     gap: 6px;
     font-size: 10px;
-    color: var(--text-low);
+    color: #8ea2bc;
     min-width: 0;
   }
 
   .brand-sub span {
-    padding: 1px 4px;
-    border: 1px solid rgba(51, 65, 85, 0.5);
-    background: #111923;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(78, 112, 155, 0.15);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .workspace-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+    white-space: nowrap;
+  }
+
+  .quick-toggle,
+  .panel-toggle,
+  .icon-inline {
+    border: 1px solid transparent;
+    background: rgba(35, 54, 76, 0.42);
+    color: #b2c4da;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 5px 8px;
+    border-radius: 8px;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+  }
+
+  .quick-toggle:hover,
+  .panel-toggle:hover,
+  .icon-inline:hover {
+    border-color: rgba(122, 162, 206, 0.3);
+    background: rgba(45, 69, 95, 0.62);
+  }
+
+  .quick-toggle.active {
+    color: #e6f0ff;
+    border-color: rgba(111, 171, 255, 0.38);
+    background: rgba(79, 136, 220, 0.28);
+  }
+
+  .quick-toggle.accent {
+    color: #eaf3ff;
+    border-color: rgba(111, 171, 255, 0.46);
+    background: linear-gradient(180deg, rgba(69, 130, 214, 0.62), rgba(54, 102, 171, 0.64));
+  }
+
+  .quick-toggle.icon-only {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+  }
+
+  .icon-inline {
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border-radius: 6px;
   }
 
   .control-strip :global(.replay-controls) {
@@ -1495,10 +1976,16 @@
   .header-metrics {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     font-size: 10px;
-    color: var(--text-mid);
     white-space: nowrap;
+    color: #8fa5c2;
+  }
+
+  .header-metrics span {
+    padding: 4px 7px;
+    border-radius: 999px;
+    background: rgba(75, 101, 130, 0.2);
   }
 
   .header-metrics .positive {
@@ -1509,20 +1996,111 @@
     color: var(--bear);
   }
 
-  .header-metrics span {
-    padding: 4px 6px;
-    border: 1px solid rgba(51, 65, 85, 0.5);
-    background: #111923;
+  .workspace-grid {
+    --watch-col: 0px;
+    --right-col: 0px;
+    display: grid;
+    grid-template-columns: var(--watch-col) minmax(0, 1fr) var(--right-col);
+    gap: 8px;
+    padding: 8px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .workspace-grid.with-watchlist {
+    --watch-col: 220px;
+  }
+
+  .workspace-grid.with-right-drawer {
+    --right-col: 350px;
+  }
+
+  .watchlist-panel,
+  .chart-area,
+  .right-rail {
+    border: 1px solid rgba(101, 127, 160, 0.08);
+    background: linear-gradient(180deg, rgba(16, 24, 35, 0.92), rgba(12, 18, 28, 0.94));
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(4, 11, 18, 0.42);
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .watchlist-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .watchlist-head {
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8fa5c2;
+    border-bottom: 1px solid rgba(101, 127, 160, 0.12);
+  }
+
+  .watchlist-body {
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .watch-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    text-align: left;
+    padding: 7px 8px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    background: rgba(46, 69, 94, 0.14);
+    color: #97acc7;
+    font-size: 10px;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  }
+
+  .watch-item:hover {
+    background: rgba(56, 83, 113, 0.26);
+    border-color: rgba(113, 149, 191, 0.22);
+  }
+
+  .watch-item.active {
+    color: #e2efff;
+    background: rgba(88, 145, 229, 0.28);
+    border-color: rgba(114, 167, 247, 0.3);
+  }
+
+  .watch-symbol {
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    color: #dce9fa;
+  }
+
+  .watch-spread {
+    color: #80c6a5;
+  }
+
+  .chart-area {
+    display: flex;
+    flex-direction: column;
   }
 
   .chart-shell {
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(51, 65, 85, 0.5);
-    overflow: hidden;
-    background: #0f151f;
     height: 100%;
     min-height: 0;
+    overflow: hidden;
+    background: transparent;
   }
 
   .chart-shell-head {
@@ -1531,48 +2109,51 @@
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
-    background: #101824;
+    border-bottom: 1px solid rgba(101, 127, 160, 0.1);
+    background: rgba(19, 31, 46, 0.58);
   }
 
   .instrument-line {
     display: flex;
     gap: 8px;
     align-items: center;
-    color: var(--text-mid);
+    color: #a7bad2;
     font-size: 10px;
     min-width: 0;
     flex-wrap: wrap;
   }
 
   .instrument-line strong {
-    color: var(--text-hi);
+    color: #e6f0ff;
     font-size: 11px;
   }
 
   .ohlc-line {
-    color: #94a8c3;
+    color: #8fa5c2;
+  }
+
+  .status-strip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .ok-pill,
   .warning-pill {
-    padding: 3px 8px;
+    padding: 4px 8px;
+    border-radius: 999px;
     font-size: 10px;
     font-weight: 600;
-    border: 1px solid transparent;
-    white-space: nowrap;
   }
 
   .ok-pill {
-    color: #97e2bd;
-    background: rgba(20, 184, 122, 0.16);
-    border: 1px solid rgba(20, 184, 122, 0.45);
+    color: #9ce8bf;
+    background: rgba(28, 174, 119, 0.2);
   }
 
   .warning-pill {
-    color: #ffd08a;
-    background: rgba(243, 179, 90, 0.16);
-    border: 1px solid rgba(243, 179, 90, 0.45);
+    color: #ffd797;
+    background: rgba(219, 153, 52, 0.24);
   }
 
   .loading-overlay,
@@ -1581,73 +2162,61 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 14px;
     height: 100%;
-    min-height: 0;
-    gap: 16px;
   }
 
   .spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid var(--border-color);
-    border-top-color: var(--accent-color);
+    width: 34px;
+    height: 34px;
+    border: 3px solid rgba(108, 139, 176, 0.25);
+    border-top-color: rgba(131, 181, 255, 0.85);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .loading-overlay p,
   .error-message {
-    color: var(--text-secondary);
-    font-size: 14px;
+    color: #9cb1cd;
+    font-size: 13px;
   }
 
   .error-message {
-    color: var(--danger-color);
+    color: #ff9aa9;
   }
 
   .btn {
     padding: 7px 12px;
-    background: var(--accent-color);
-    border: none;
-    color: white;
+    border-radius: 7px;
+    background: rgba(89, 145, 224, 0.88);
+    color: #f2f7ff;
     font-size: 11px;
     font-weight: 600;
-    cursor: pointer;
-  }
-
-  .btn:hover {
-    opacity: 0.85;
-  }
-
-  .chart-area {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    min-width: 0;
-    overflow: hidden;
   }
 
   .chart-host {
     flex: 1;
-    min-height: 0;
     min-width: 0;
+    min-height: 0;
     overflow: hidden;
   }
 
   .chart-workspace {
     height: 100%;
     display: grid;
-    grid-template-columns: 68px minmax(0, 1fr);
+    grid-template-columns: 56px minmax(0, 1fr);
     min-height: 0;
   }
 
   .chart-toolbar {
-    border-right: 1px solid rgba(38, 49, 66, 0.75);
-    background: #0f1824;
+    border-right: 1px solid rgba(101, 127, 160, 0.1);
+    background: rgba(16, 26, 39, 0.84);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -1656,29 +2225,31 @@
   }
 
   .tool-btn {
-    border: 1px solid rgba(51, 65, 85, 0.65);
-    background: #141e2b;
-    color: var(--text-mid);
-    font-size: 10px;
+    border: 1px solid transparent;
+    background: rgba(41, 62, 84, 0.28);
+    color: #a9bdd6;
+    font-size: 12px;
     padding: 6px 4px;
+    border-radius: 8px;
     text-transform: uppercase;
-    cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
   }
 
   .tool-btn:hover {
-    border-color: rgba(130, 156, 191, 0.75);
+    border-color: rgba(109, 154, 209, 0.28);
+    background: rgba(56, 83, 112, 0.44);
   }
 
   .tool-btn.active {
-    color: #dce9ff;
-    border-color: rgba(76, 141, 255, 0.75);
-    background: rgba(76, 141, 255, 0.18);
+    color: #e6f0ff;
+    border-color: rgba(105, 165, 242, 0.34);
+    background: rgba(78, 136, 217, 0.33);
   }
 
   .tool-btn.danger {
-    color: #fecaca;
-    border-color: rgba(220, 38, 38, 0.45);
-    background: rgba(127, 29, 29, 0.35);
+    color: #ffd5db;
+    background: rgba(150, 48, 64, 0.35);
+    border-color: rgba(219, 101, 122, 0.3);
   }
 
   .tool-btn:disabled {
@@ -1687,7 +2258,8 @@
   }
 
   .tool-divider {
-    border-top: 1px solid rgba(51, 65, 85, 0.65);
+    height: 1px;
+    background: rgba(101, 127, 160, 0.14);
     margin: 4px 0;
   }
 
@@ -1696,7 +2268,7 @@
     flex-direction: column;
     gap: 4px;
     font-size: 9px;
-    color: var(--text-low);
+    color: #7d93af;
     text-transform: uppercase;
     letter-spacing: 0.35px;
   }
@@ -1704,17 +2276,12 @@
   .style-label input,
   .style-label select {
     width: 100%;
-    border: 1px solid rgba(51, 65, 85, 0.65);
-    background: #101a28;
-    color: #d8e4f7;
+    border: 1px solid rgba(105, 133, 164, 0.25);
+    background: rgba(28, 43, 61, 0.66);
+    color: #d7e6fb;
     font-size: 10px;
-    padding: 4px;
-    border-radius: 4px;
-  }
-
-  .style-label input[type='color'] {
-    min-height: 28px;
-    padding: 2px;
+    padding: 5px 6px;
+    border-radius: 6px;
   }
 
   .chart-footer {
@@ -1723,27 +2290,113 @@
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 5px 10px;
-    border-top: 1px solid rgba(38, 49, 66, 0.65);
-    background: #101824;
-    color: var(--text-low);
+    padding: 6px 10px;
+    border-top: 1px solid rgba(101, 127, 160, 0.12);
+    color: #7e95b0;
     font-size: 10px;
+    background: rgba(14, 24, 36, 0.82);
   }
 
   .warning-banner {
     margin: 7px 10px 0;
-    padding: 6px 10px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    color: #ffd797;
+    background: rgba(219, 153, 52, 0.2);
     font-size: 11px;
-    color: #ffd08a;
-    border: 1px solid rgba(255, 208, 138, 0.5);
-    background: rgba(255, 178, 58, 0.15);
+  }
+
+  .right-rail {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rail-head {
+    padding: 8px 9px;
+    border-bottom: 1px solid rgba(101, 127, 160, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .rail-tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .rail-tab {
+    padding: 6px 9px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #99b0cb;
+    background: rgba(53, 76, 102, 0.24);
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  }
+
+  .rail-tab:hover {
+    border-color: rgba(113, 169, 245, 0.18);
+    background: rgba(82, 139, 219, 0.2);
+  }
+
+  .rail-tab.active {
+    color: #e6f0ff;
+    background: rgba(82, 139, 219, 0.28);
+    border-color: rgba(113, 169, 245, 0.35);
+  }
+
+  .rail-pane {
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .rail-order-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 10px 0;
+    color: #8fa5c2;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.42px;
+  }
+
+  .risk-pane {
+    padding: 10px;
+  }
+
+  .risk-hint {
+    border-radius: 9px;
+    background: rgba(34, 52, 74, 0.22);
+    border: 1px solid rgba(103, 131, 166, 0.12);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .risk-hint h3 {
+    font-size: 12px;
+    color: #e4efff;
+  }
+
+  .risk-hint p {
+    color: #9cb1cd;
+    font-size: 11px;
+    line-height: 1.4;
   }
 
   .risk-panel {
-    margin: 8px 10px 10px;
-    border: 1px solid rgba(76, 141, 255, 0.5);
-    background: rgba(9, 18, 29, 0.92);
-    padding: 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(110, 166, 240, 0.22);
+    background: rgba(17, 29, 43, 0.8);
+    padding: 9px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1753,13 +2406,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    color: var(--text-hi);
+    color: #e5efff;
     font-size: 11px;
   }
 
   .risk-panel-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -1768,16 +2421,32 @@
     flex-direction: column;
     gap: 4px;
     font-size: 10px;
-    color: var(--text-low);
+    color: #8fa4bf;
   }
 
   .risk-panel-grid input,
   .risk-panel-grid select {
-    border: 1px solid rgba(51, 65, 85, 0.65);
-    background: #121c2a;
-    color: #dae7ff;
+    border: 1px solid rgba(105, 133, 164, 0.25);
+    background: rgba(26, 42, 60, 0.72);
+    color: #d7e6fb;
+    border-radius: 6px;
+    padding: 6px;
     font-size: 11px;
-    padding: 5px 6px;
+  }
+
+  .risk-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10px;
+    color: #93abc8;
+  }
+
+  .risk-summary span {
+    border-radius: 999px;
+    background: rgba(58, 83, 113, 0.32);
+    border: 1px solid rgba(103, 131, 166, 0.16);
+    padding: 4px 8px;
   }
 
   .risk-panel-actions {
@@ -1787,39 +2456,33 @@
 
   .risk-error {
     margin: 0;
-    color: #fecaca;
+    color: #ffb1be;
     font-size: 11px;
-  }
-
-  .right-rail {
-    display: flex;
-    flex-direction: column;
-    overflow: auto;
-  }
-
-  .rail-head {
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border-subtle);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.45px;
-    color: var(--text-low);
-    background: #111924;
   }
 
   .right-rail :global(.order-panel),
   .right-rail :global(.metrics-panel) {
     border-radius: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .bottom-panel {
+    padding: 0 6px 6px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .bottom-panel.collapsed {
+    padding-bottom: 0;
   }
 
   .dock-tabs {
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 0 0 6px;
+    gap: 4px;
     overflow-x: auto;
   }
 
@@ -1827,32 +2490,37 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    border: 1px solid rgba(51, 65, 85, 0.5);
-    border-bottom: none;
-    background: #101824;
-    color: var(--text-mid);
-    padding: 6px 10px 7px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: rgba(30, 44, 62, 0.44);
+    color: #9cb2ce;
+    padding: 6px 10px;
     font-size: 10px;
     font-weight: 600;
     white-space: nowrap;
   }
 
-  .dock-count {
-    font-size: 10px;
-    color: var(--text-low);
+  .dock-tab.active {
+    color: #e6f0ff;
+    border-color: rgba(110, 168, 245, 0.28);
+    background: rgba(78, 136, 217, 0.3);
   }
 
-  .dock-tab.active {
-    color: #d9e7ff;
-    border-color: rgba(76, 141, 255, 0.6);
-    background: rgba(76, 141, 255, 0.18);
+  .dock-collapse {
+    margin-left: auto;
+  }
+
+  .dock-count {
+    color: #8096b2;
+    font-size: 10px;
   }
 
   .dock-body {
-    background: var(--bg-panel);
-    border: 1px solid rgba(51, 65, 85, 0.5);
-    height: calc(100% - 34px);
     min-height: 0;
+    flex: 1;
+    border-radius: 11px;
+    border: 1px solid rgba(101, 127, 160, 0.14);
+    background: linear-gradient(180deg, rgba(15, 23, 35, 0.98), rgba(12, 19, 30, 0.96));
     overflow: hidden;
     position: relative;
   }
@@ -1861,7 +2529,6 @@
     position: absolute;
     inset: 0;
     display: none;
-    min-width: 0;
     min-height: 0;
     overflow: hidden;
   }
@@ -1871,46 +2538,64 @@
     flex-direction: column;
   }
 
-  @media (max-width: 1199px) {
-    .app-container {
-      grid-template-rows: 104px minmax(0, 1fr) 210px;
-    }
-
+  @media (max-width: 1399px) {
     .header-metrics {
       display: none;
     }
+  }
+
+  @media (max-width: 1199px) {
+    .tradingview-shell {
+      grid-template-rows: 108px minmax(0, 1fr) 42px;
+    }
+
+    .tradingview-shell.bottom-open {
+      grid-template-rows: 108px minmax(0, 1fr) 210px;
+    }
 
     .control-strip {
-      height: 100%;
+      flex-wrap: wrap;
       align-items: flex-start;
-      flex-direction: column;
       gap: 6px;
       padding: 6px 0;
     }
 
     .brand-block {
-      width: 100%;
-      flex-direction: row;
-      justify-content: space-between;
-      align-items: center;
+      min-width: 130px;
     }
 
-    .control-strip :global(.replay-controls) {
+    .workspace-actions {
+      order: 3;
       width: 100%;
+      justify-content: flex-start;
+    }
+
+    .workspace-grid {
+      grid-template-columns: minmax(0, 1fr);
+      grid-auto-rows: minmax(120px, auto);
+    }
+
+    .watchlist-panel {
+      max-height: 170px;
+    }
+
+    .right-rail {
+      max-height: 38vh;
     }
   }
 
   @media (max-width: 767px) {
-    .app-container {
-      grid-template-rows: 110px minmax(0, 1fr) 240px;
+    .tradingview-shell {
+      grid-template-rows: 126px minmax(0, 1fr) 42px;
     }
 
-    .control-strip {
-      gap: 4px;
+    .tradingview-shell.bottom-open {
+      grid-template-rows: 126px minmax(0, 1fr) 220px;
     }
 
-    .dock-body {
-      height: calc(100% - 40px);
+    .workspace-actions {
+      overflow-x: auto;
+      padding-bottom: 2px;
     }
 
     .chart-workspace {
@@ -1920,33 +2605,32 @@
 
     .chart-toolbar {
       border-right: 0;
-      border-bottom: 1px solid rgba(38, 49, 66, 0.75);
+      border-bottom: 1px solid rgba(101, 127, 160, 0.2);
       flex-direction: row;
-      flex-wrap: nowrap;
       overflow-x: auto;
       overflow-y: hidden;
       padding: 6px;
     }
 
     .tool-btn {
-      min-width: 62px;
+      min-width: 44px;
+      flex: 0 0 auto;
     }
 
     .tool-divider {
       width: 1px;
       min-height: 32px;
-      border-top: 0;
-      border-left: 1px solid rgba(51, 65, 85, 0.65);
+      height: auto;
       margin: 0 4px;
     }
 
     .style-label {
-      min-width: 90px;
+      min-width: 92px;
       flex: 0 0 auto;
     }
 
     .risk-panel-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
     }
   }
 </style>

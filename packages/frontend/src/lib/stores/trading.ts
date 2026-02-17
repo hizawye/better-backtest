@@ -15,7 +15,9 @@ import type {
   Tick,
   Timeframe,
   Trade,
-  TradingPair
+  TradingPair,
+  WorkspaceBottomTab,
+  WorkspaceRightTab
 } from '$shared/types';
 
 interface TradingState {
@@ -40,6 +42,14 @@ interface TradingState {
   magnetEnabled: boolean;
   drawingsVisible: boolean;
   toolStylePresets: Partial<Record<Exclude<DrawingToolType, 'cursor' | 'risk_position'>, DrawingStyle>>;
+
+  // Workspace UI
+  watchlistVisible: boolean;
+  rightDrawerOpen: boolean;
+  rightDrawerTab: WorkspaceRightTab;
+  bottomDrawerOpen: boolean;
+  bottomDrawerTab: WorkspaceBottomTab;
+  compactToolbar: boolean;
 
   // Trading
   positions: Position[];
@@ -93,6 +103,13 @@ interface TradingState {
   setToolStylePresets: (
     styles: Partial<Record<Exclude<DrawingToolType, 'cursor' | 'risk_position'>, DrawingStyle>>
   ) => void;
+
+  setWatchlistVisible: (visible: boolean) => void;
+  setRightDrawerOpen: (open: boolean) => void;
+  setRightDrawerTab: (tab: WorkspaceRightTab) => void;
+  setBottomDrawerOpen: (open: boolean) => void;
+  setBottomDrawerTab: (tab: WorkspaceBottomTab) => void;
+  setCompactToolbar: (compact: boolean) => void;
 
   setPositions: (positions: Position[]) => void;
   addPosition: (position: Position) => void;
@@ -154,6 +171,12 @@ const store = createStore<TradingState>((set) => ({
   magnetEnabled: false,
   drawingsVisible: true,
   toolStylePresets: {},
+  watchlistVisible: true,
+  rightDrawerOpen: false,
+  rightDrawerTab: 'order',
+  bottomDrawerOpen: false,
+  bottomDrawerTab: 'positions',
+  compactToolbar: false,
 
   positions: [],
   orders: [],
@@ -230,6 +253,12 @@ const store = createStore<TradingState>((set) => ({
       }
     })),
   setToolStylePresets: (toolStylePresets) => set({ toolStylePresets }),
+  setWatchlistVisible: (watchlistVisible) => set({ watchlistVisible }),
+  setRightDrawerOpen: (rightDrawerOpen) => set({ rightDrawerOpen }),
+  setRightDrawerTab: (rightDrawerTab) => set({ rightDrawerTab }),
+  setBottomDrawerOpen: (bottomDrawerOpen) => set({ bottomDrawerOpen }),
+  setBottomDrawerTab: (bottomDrawerTab) => set({ bottomDrawerTab }),
+  setCompactToolbar: (compactToolbar) => set({ compactToolbar }),
 
   setPositions: (positions) => set({ positions }),
   addPosition: (position) =>
@@ -303,6 +332,12 @@ const store = createStore<TradingState>((set) => ({
       magnetEnabled: false,
       drawingsVisible: true,
       toolStylePresets: {},
+      watchlistVisible: true,
+      rightDrawerOpen: false,
+      rightDrawerTab: 'order',
+      bottomDrawerOpen: false,
+      bottomDrawerTab: 'positions',
+      compactToolbar: false,
       positions: [],
       orders: [],
       trades: [],

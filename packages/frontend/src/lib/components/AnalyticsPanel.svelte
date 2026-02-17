@@ -5,6 +5,7 @@
   export let crossSession: CrossSessionAnalytics | null = null;
   export let onExportCsv: (() => void) | undefined;
   export let onExportJson: (() => void) | undefined;
+  $: setupEntries = snapshot ? Object.entries(snapshot.bySetupTag) : [];
 
   function toPoints(values: Array<{ value: number }>, width = 260, height = 80): string {
     if (values.length === 0) return '';
@@ -36,66 +37,77 @@
       <p class="empty">No analytics yet</p>
     {:else}
       {#if crossSession}
-        <div class="cross-session">
+        <section class="section">
           <h4>Cross-Session</h4>
-          <div>Sessions: {crossSession.sessions}</div>
-          <div>Trades: {crossSession.trades}</div>
-          <div>Total PnL: ${crossSession.totalPnL.toFixed(2)}</div>
-          <div>Win Rate: {crossSession.winRate.toFixed(1)}%</div>
-        </div>
+          <div class="stats-table mono">
+            <div class="stat-row"><span>Sessions</span><strong>{crossSession.sessions}</strong></div>
+            <div class="stat-row"><span>Trades</span><strong>{crossSession.trades}</strong></div>
+            <div class="stat-row"><span>Total PnL</span><strong>${crossSession.totalPnL.toFixed(2)}</strong></div>
+            <div class="stat-row"><span>Win Rate</span><strong>{crossSession.winRate.toFixed(1)}%</strong></div>
+          </div>
+        </section>
       {/if}
 
-      <div class="grid">
-        <div>Total Trades: {snapshot.totalTrades}</div>
-        <div>Win Rate: {snapshot.winRate}%</div>
-        <div>Total PnL: ${snapshot.totalPnL.toFixed(2)}</div>
-        <div>Expectancy: ${snapshot.expectancy.toFixed(2)}</div>
-        <div>Profit Factor: {snapshot.profitFactor.toFixed(2)}</div>
-        <div>Max DD: ${snapshot.maxDrawdown.toFixed(2)}</div>
-        <div>Avg Win: ${snapshot.averageWin.toFixed(2)}</div>
-        <div>Avg Loss: ${snapshot.averageLoss.toFixed(2)}</div>
-        <div>Best Streak: {snapshot.bestStreak}</div>
-        <div>Worst Streak: {snapshot.worstStreak}</div>
-        <div>Avg R: {snapshot.averageRMultiple.toFixed(2)}</div>
-        <div>Median R: {snapshot.medianRMultiple.toFixed(2)}</div>
-      </div>
+      <section class="section">
+        <h4>Performance</h4>
+        <div class="stats-table mono">
+          <div class="stat-row"><span>Total Trades</span><strong>{snapshot.totalTrades}</strong></div>
+          <div class="stat-row"><span>Win Rate</span><strong>{snapshot.winRate}%</strong></div>
+          <div class="stat-row"><span>Total PnL</span><strong>${snapshot.totalPnL.toFixed(2)}</strong></div>
+          <div class="stat-row"><span>Expectancy</span><strong>${snapshot.expectancy.toFixed(2)}</strong></div>
+          <div class="stat-row"><span>Profit Factor</span><strong>{snapshot.profitFactor.toFixed(2)}</strong></div>
+          <div class="stat-row"><span>Max DD</span><strong>${snapshot.maxDrawdown.toFixed(2)}</strong></div>
+          <div class="stat-row"><span>Avg Win</span><strong>${snapshot.averageWin.toFixed(2)}</strong></div>
+          <div class="stat-row"><span>Avg Loss</span><strong>${snapshot.averageLoss.toFixed(2)}</strong></div>
+          <div class="stat-row"><span>Best Streak</span><strong>{snapshot.bestStreak}</strong></div>
+          <div class="stat-row"><span>Worst Streak</span><strong>{snapshot.worstStreak}</strong></div>
+          <div class="stat-row"><span>Avg R</span><strong>{snapshot.averageRMultiple.toFixed(2)}</strong></div>
+          <div class="stat-row"><span>Median R</span><strong>{snapshot.medianRMultiple.toFixed(2)}</strong></div>
+        </div>
+      </section>
 
-      <div class="chart">
+      <section class="section">
         <h4>Equity Curve</h4>
         <svg viewBox="0 0 260 80" preserveAspectRatio="none">
           <polyline points={toPoints(snapshot.equityCurve)} fill="none" stroke="#089981" stroke-width="2" />
         </svg>
-      </div>
+      </section>
 
-      <div class="chart">
+      <section class="section">
         <h4>Drawdown Curve</h4>
         <svg viewBox="0 0 260 80" preserveAspectRatio="none">
           <polyline points={toPoints(snapshot.drawdownCurve)} fill="none" stroke="#f23645" stroke-width="2" />
         </svg>
-      </div>
+      </section>
 
-      <div class="histogram">
+      <section class="section">
         <h4>R Distribution</h4>
-        {#each snapshot.rDistribution as bucket}
-          <div class="bar-row">
-            <span>{bucket.bucket}</span>
-            <div class="bar-wrap"><div class="bar" style={`width: ${bucket.count * 12}px`}></div></div>
-            <span>{bucket.count}</span>
-          </div>
-        {/each}
-      </div>
+        <div class="histogram mono">
+          {#each snapshot.rDistribution as bucket}
+            <div class="bar-row">
+              <span>{bucket.bucket}</span>
+              <div class="bar-wrap"><div class="bar" style={`width: ${bucket.count * 12}px`}></div></div>
+              <span>{bucket.count}</span>
+            </div>
+          {/each}
+        </div>
+      </section>
 
-      <div class="setups">
-        <h4>Setup Performance</h4>
-        {#each Object.entries(snapshot.bySetupTag) as [tag, stats]}
-          <div class="setup-row">
-            <span>{tag}</span>
-            <span>{stats.trades} trades</span>
-            <span>${stats.pnl.toFixed(2)}</span>
-            <span>{stats.winRate.toFixed(1)}%</span>
+      {#if setupEntries.length > 0}
+        <section class="section">
+          <h4>Setup Performance</h4>
+          <div class="setups mono">
+            {#each setupEntries as [tag, stats]}
+              <div class="setup-row">
+                <span>{tag}</span>
+                <span>{stats.trades} trades</span>
+                <span>${stats.pnl.toFixed(2)}</span>
+                <span>{stats.winRate.toFixed(1)}%</span>
+              </div>
+            {/each}
           </div>
-        {/each}
-      </div>
+        </section>
+      {/if}
     {/if}
   </div>
 </div>
@@ -105,19 +117,25 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    background: #0f161f;
   }
 
   .header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: #101824;
   }
 
   .header h3 {
     margin: 0;
-    font-size: 13px;
+    font-size: 11px;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+    color: var(--text-hi);
   }
 
   .actions {
@@ -126,86 +144,261 @@
   }
 
   .actions button {
-    font-size: 11px;
-    padding: 5px 8px;
-    border-radius: 4px;
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    font-size: 10px;
+    padding: 5px 8px 6px;
+    background: #1b2736;
+    color: var(--text-mid);
+    border: 1px solid rgba(71, 85, 105, 0.55);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .actions button:hover {
+    color: var(--text-hi);
+    border-color: rgba(114, 136, 166, 0.75);
   }
 
   .content {
-    padding: 12px;
+    padding: 10px 12px;
     overflow: auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
 
   .empty {
-    color: var(--text-secondary);
-    font-size: 12px;
+    color: var(--text-low);
+    font-size: 11px;
   }
 
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  .section {
+    display: flex;
+    flex-direction: column;
     gap: 6px;
-    font-size: 12px;
+    border-top: 1px solid rgba(51, 65, 85, 0.45);
+    padding-top: 8px;
   }
 
-  .chart h4,
-  .histogram h4,
-  .setups h4 {
-    margin: 0 0 6px 0;
-    font-size: 12px;
-    color: var(--text-secondary);
+  .section h4 {
+    margin: 0;
+    font-size: 10px;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.45px;
   }
 
-  .cross-session {
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 8px;
-    font-size: 12px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
+  .stats-table {
+    border-top: 1px solid rgba(51, 65, 85, 0.4);
+    border-bottom: 1px solid rgba(51, 65, 85, 0.4);
   }
 
-  .cross-session h4 {
-    margin: 0 0 4px 0;
-    grid-column: 1 / -1;
-    font-size: 12px;
-    color: var(--text-secondary);
+  .stat-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-top: 1px solid rgba(51, 65, 85, 0.35);
+    font-size: 11px;
+  }
+
+  .stat-row:first-child {
+    border-top: none;
+  }
+
+  .stat-row span {
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+  }
+
+  .stat-row strong {
+    color: var(--text-hi);
+    font-size: 11px;
+    font-weight: 600;
   }
 
   svg {
     width: 100%;
     height: 80px;
-    background: var(--bg-tertiary);
-    border-radius: 4px;
+    background: #0f1721;
+    border: 1px solid rgba(38, 49, 66, 0.65);
+  }
+
+  .histogram,
+  .setups {
+    border-top: 1px solid rgba(51, 65, 85, 0.4);
+    border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+    padding: 4px 0;
   }
 
   .bar-row,
   .setup-row {
     display: grid;
-    grid-template-columns: 1fr auto auto auto;
     gap: 8px;
     align-items: center;
-    font-size: 11px;
-    margin-bottom: 4px;
+    font-size: 10px;
+    color: var(--text-mid);
+    padding: 4px 0;
+    border-top: 1px solid rgba(51, 65, 85, 0.3);
+  }
+
+  .bar-row {
+    grid-template-columns: 44px minmax(0, 1fr) 32px;
+  }
+
+  .setup-row {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
+
+  .bar-row:first-child,
+  .setup-row:first-child {
+    border-top: none;
   }
 
   .bar-wrap {
-    width: 70px;
     height: 6px;
-    background: var(--bg-tertiary);
-    border-radius: 4px;
+    background: #0f1721;
     overflow: hidden;
+    border: 1px solid rgba(38, 49, 66, 0.65);
   }
 
   .bar {
     height: 100%;
-    background: var(--accent-color);
+    background: linear-gradient(90deg, #3a7fff 0%, #6ba5ff 100%);
+  }
+
+  .setups .setup-row span:first-child {
+    color: var(--text-hi);
+  }
+
+  .section:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .section:first-child .stats-table,
+  .section:first-child .histogram,
+  .section:first-child .setups {
+    margin-top: 0;
+  }
+
+  .section:last-child {
+    padding-bottom: 2px;
+  }
+
+  .header h3,
+  .section h4,
+  .stat-row span {
+    white-space: nowrap;
+  }
+
+  .stat-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stat-row strong {
+    white-space: nowrap;
+  }
+
+  .section h4 {
+    line-height: 1.2;
+  }
+
+  .bar-row span,
+  .setup-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .section .stats-table {
+    margin-top: 2px;
+  }
+
+  .section .histogram,
+  .section .setups {
+    margin-top: 2px;
+  }
+
+  .section .histogram {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .section .setups {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .section .histogram .bar-row:last-child,
+  .section .setups .setup-row:last-child {
+    padding-bottom: 2px;
+  }
+
+  .section .histogram .bar-row:first-child,
+  .section .setups .setup-row:first-child {
+    padding-top: 2px;
+  }
+
+  .section .stats-table .stat-row:last-child {
+    padding-bottom: 4px;
+  }
+
+  .section .stats-table .stat-row:first-child {
+    padding-top: 4px;
+  }
+
+  .content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .content::-webkit-scrollbar-thumb {
+    background: rgba(71, 85, 105, 0.6);
+  }
+
+  .content::-webkit-scrollbar-track {
+    background: #0f161f;
+  }
+
+  .content {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(71, 85, 105, 0.6) #0f161f;
+  }
+
+  .header h3 {
+    color: var(--text-hi);
+  }
+
+  .section h4,
+  .stat-row span {
+    color: var(--text-low);
+  }
+
+  .stat-row strong,
+  .setup-row span,
+  .bar-row span {
+    color: var(--text-hi);
+  }
+
+  .bar-row span:first-child,
+  .setup-row span:nth-child(2),
+  .setup-row span:nth-child(4) {
+    color: var(--text-mid);
+  }
+
+  .setup-row span:nth-child(3) {
+    color: var(--text-hi);
+  }
+
+  .section .setups .setup-row span:first-child {
+    color: var(--text-hi);
+  }
+
+  .section .setups .setup-row span:nth-child(2),
+  .section .setups .setup-row span:nth-child(4) {
+    color: var(--text-low);
   }
 </style>

@@ -14,7 +14,8 @@ import type {
   SessionSnapshot,
   Timeframe,
   TradingPair,
-  Trade
+  Trade,
+  WorkspacePrefs
 } from '$shared/types';
 
 interface BarRecord {
@@ -58,12 +59,26 @@ interface ToolPrefsRecord {
   updatedAt: number;
 }
 
+interface WorkspacePrefsRecord {
+  id: string;
+  sessionId: string;
+  watchlistVisible: boolean;
+  rightDrawerOpen: boolean;
+  rightDrawerTab: WorkspacePrefs['rightDrawerTab'];
+  bottomDrawerOpen: boolean;
+  bottomDrawerTab: WorkspacePrefs['bottomDrawerTab'];
+  compactToolbar: boolean;
+  updatedAt: number;
+}
+
 export interface ToolPrefsPayload {
   activeTool: DrawingToolType;
   magnetEnabled: boolean;
   drawingsVisible: boolean;
   stylePresets: ToolStylePresetMap;
 }
+
+export interface WorkspacePrefsPayload extends WorkspacePrefs {}
 
 const db = new Dexie('BetterBacktest') as Dexie & {
   bars: EntityTable<BarRecord, 'id'>;
@@ -79,6 +94,7 @@ const db = new Dexie('BetterBacktest') as Dexie & {
   analyticsSnapshots: EntityTable<AnalyticsSnapshot, 'id'>;
   drawings: EntityTable<DrawingEntity, 'id'>;
   toolPrefs: EntityTable<ToolPrefsRecord, 'id'>;
+  workspacePrefs: EntityTable<WorkspacePrefsRecord, 'id'>;
 };
 
 db.version(1).stores({
@@ -124,6 +140,23 @@ db.version(4).stores({
   analyticsSnapshots: 'id, sessionId, createdAt',
   drawings: 'id, sessionId, pair, tool, updatedAt, [sessionId+pair]',
   toolPrefs: 'id, sessionId, updatedAt'
+});
+
+db.version(5).stores({
+  bars: 'id, pair, timestamp',
+  aggregatedBars: 'id, sessionId, pair, timeframe, timestamp',
+  sessions: 'id, updatedAt, pair, timeframe, from, to',
+  snapshots: 'sessionId, savedAt',
+  orders: 'id, sessionId, status, createdAt',
+  positions: 'id, sessionId, entryTime',
+  trades: 'id, sessionId, exitTime',
+  sessionEvents: 'id, sessionId, sequence, timestamp, type',
+  journalEntries: 'id, sessionId, timestamp, reviewStatus',
+  attachments: 'id, sessionId, journalEntryId, createdAt',
+  analyticsSnapshots: 'id, sessionId, createdAt',
+  drawings: 'id, sessionId, pair, tool, updatedAt, [sessionId+pair]',
+  toolPrefs: 'id, sessionId, updatedAt',
+  workspacePrefs: 'id, sessionId, updatedAt'
 });
 
 export async function saveBars(pair: string, bars: Bar[]): Promise<void> {
@@ -386,6 +419,36 @@ export async function getToolPrefs(sessionId: string): Promise<ToolPrefsPayload 
     magnetEnabled: record.magnetEnabled,
     drawingsVisible: record.drawingsVisible,
     stylePresets: record.stylePresets
+  };
+}
+
+export async function saveWorkspacePrefs(
+  sessionId: string,
+  prefs: WorkspacePrefsPayload
+): Promise<void> {
+  await db.workspacePrefs.put({
+    id: `workspaceprefs_${sessionId}`,
+    sessionId,
+    watchlistVisible: prefs.watchlistVisible,
+    rightDrawerOpen: prefs.rightDrawerOpen,
+    rightDrawerTab: prefs.rightDrawerTab,
+    bottomDrawerOpen: prefs.bottomDrawerOpen,
+    bottomDrawerTab: prefs.bottomDrawerTab,
+    compactToolbar: prefs.compactToolbar,
+    updatedAt: Date.now()
+  });
+}
+
+export async function getWorkspacePrefs(sessionId: string): Promise<WorkspacePrefsPayload | undefined> {
+  const record = await db.workspacePrefs.get(`workspaceprefs_${sessionId}`);
+  if (!record) return undefined;
+  return {
+    watchlistVisible: record.watchlistVisible,
+    rightDrawerOpen: record.rightDrawerOpen,
+    rightDrawerTab: record.rightDrawerTab,
+    bottomDrawerOpen: record.bottomDrawerOpen,
+    bottomDrawerTab: record.bottomDrawerTab,
+    compactToolbar: record.compactToolbar
   };
 }
 
