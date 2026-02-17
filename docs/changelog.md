@@ -59,6 +59,19 @@
 ### Changed
 - Trade route now refreshes aggregated analytics across all persisted session trades.
 
+## [0.8.0] - 2026-02-17
+
+### Added
+- Milestone 6 hardening test suite:
+  - Execution engine tests (fill/trigger semantics).
+  - PnL and risk tests (commission/slippage, sizing, validation).
+  - Aggregation test (timeframe rollup).
+  - Integration lifecycle test (pending -> fill -> close flow).
+
+### Changed
+- Added root/frontend test scripts for automated engine validation.
+- Frontend tsconfig adjusted to keep production typecheck clean while excluding Bun test files.
+
 ## [0.2.0] - 2026-02-16
 
 ### Added

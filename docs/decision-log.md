@@ -228,3 +228,17 @@
 **Rationale**:
 - Users need more than single-session metrics to evaluate discretionary improvements over time.
 - Local aggregation preserves offline-first behavior and avoids backend dependency for v1.
+
+---
+
+## 2026-02-17 - Milestone 6 Hardening and Test Baseline
+
+**Decision**: Use Bun test runner for deterministic engine-level test coverage
+**Rationale**:
+- Zero-friction test runtime in existing stack.
+- Covers core correctness paths (fills, stops, PnL, risk, aggregation) quickly on every change.
+
+**Decision**: Exclude Bun test files from Svelte production typecheck scope
+**Rationale**:
+- Prevents false-negative build checks due to test-only runtime modules (`bun:test`).
+- Keeps production `svelte-check` output signal clean for release gating.
