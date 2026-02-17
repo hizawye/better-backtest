@@ -1,0 +1,604 @@
+{
+  "generatedAt": "2026-02-16T23:23:41.342Z",
+  "instrument": "NSXUSD",
+  "alias": "NAS100",
+  "timeframe": "M1",
+  "timezoneMode": "raw_source_wall_clock_no_dst_adjustment",
+  "totalBars": 5075918,
+  "years": [
+    {
+      "year": 2010,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2010.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201011.json",
+        "normalized/nsxusd_m1_201012.json"
+      ],
+      "bars": 40855,
+      "minTimestamp": 1289757660000,
+      "maxTimestamp": 1293807540000
+    },
+    {
+      "year": 2011,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2011.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201101.json",
+        "normalized/nsxusd_m1_201102.json",
+        "normalized/nsxusd_m1_201103.json",
+        "normalized/nsxusd_m1_201104.json",
+        "normalized/nsxusd_m1_201105.json",
+        "normalized/nsxusd_m1_201106.json",
+        "normalized/nsxusd_m1_201107.json",
+        "normalized/nsxusd_m1_201108.json",
+        "normalized/nsxusd_m1_201109.json",
+        "normalized/nsxusd_m1_201110.json",
+        "normalized/nsxusd_m1_201111.json",
+        "normalized/nsxusd_m1_201112.json"
+      ],
+      "bars": 331649,
+      "minTimestamp": 1293991800000,
+      "maxTimestamp": 1325261640000
+    },
+    {
+      "year": 2012,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2012.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201201.json",
+        "normalized/nsxusd_m1_201202.json",
+        "normalized/nsxusd_m1_201203.json",
+        "normalized/nsxusd_m1_201204.json",
+        "normalized/nsxusd_m1_201205.json",
+        "normalized/nsxusd_m1_201206.json",
+        "normalized/nsxusd_m1_201207.json",
+        "normalized/nsxusd_m1_201208.json",
+        "normalized/nsxusd_m1_201209.json",
+        "normalized/nsxusd_m1_201210.json",
+        "normalized/nsxusd_m1_201211.json",
+        "normalized/nsxusd_m1_201212.json"
+      ],
+      "bars": 325049,
+      "minTimestamp": 1325570400000,
+      "maxTimestamp": 1356973080000
+    },
+    {
+      "year": 2013,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2013.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201301.json",
+        "normalized/nsxusd_m1_201302.json",
+        "normalized/nsxusd_m1_201303.json",
+        "normalized/nsxusd_m1_201304.json",
+        "normalized/nsxusd_m1_201305.json",
+        "normalized/nsxusd_m1_201306.json",
+        "normalized/nsxusd_m1_201307.json",
+        "normalized/nsxusd_m1_201308.json",
+        "normalized/nsxusd_m1_201309.json",
+        "normalized/nsxusd_m1_201310.json",
+        "normalized/nsxusd_m1_201311.json",
+        "normalized/nsxusd_m1_201312.json"
+      ],
+      "bars": 314774,
+      "minTimestamp": 1357106400000,
+      "maxTimestamp": 1388505480000
+    },
+    {
+      "year": 2014,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2014.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201401.json",
+        "normalized/nsxusd_m1_201402.json",
+        "normalized/nsxusd_m1_201403.json",
+        "normalized/nsxusd_m1_201404.json",
+        "normalized/nsxusd_m1_201405.json",
+        "normalized/nsxusd_m1_201406.json",
+        "normalized/nsxusd_m1_201407.json",
+        "normalized/nsxusd_m1_201408.json",
+        "normalized/nsxusd_m1_201409.json",
+        "normalized/nsxusd_m1_201410.json",
+        "normalized/nsxusd_m1_201411.json",
+        "normalized/nsxusd_m1_201412.json"
+      ],
+      "bars": 318873,
+      "minTimestamp": 1388600040000,
+      "maxTimestamp": 1420045140000
+    },
+    {
+      "year": 2015,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2015.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201501.json",
+        "normalized/nsxusd_m1_201502.json",
+        "normalized/nsxusd_m1_201503.json",
+        "normalized/nsxusd_m1_201504.json",
+        "normalized/nsxusd_m1_201505.json",
+        "normalized/nsxusd_m1_201506.json",
+        "normalized/nsxusd_m1_201507.json",
+        "normalized/nsxusd_m1_201508.json",
+        "normalized/nsxusd_m1_201509.json",
+        "normalized/nsxusd_m1_201510.json",
+        "normalized/nsxusd_m1_201511.json",
+        "normalized/nsxusd_m1_201512.json"
+      ],
+      "bars": 335257,
+      "minTimestamp": 1420135200000,
+      "maxTimestamp": 1451581080000
+    },
+    {
+      "year": 2016,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2016.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201601.json",
+        "normalized/nsxusd_m1_201602.json",
+        "normalized/nsxusd_m1_201603.json",
+        "normalized/nsxusd_m1_201604.json",
+        "normalized/nsxusd_m1_201605.json",
+        "normalized/nsxusd_m1_201606.json",
+        "normalized/nsxusd_m1_201607.json",
+        "normalized/nsxusd_m1_201608.json",
+        "normalized/nsxusd_m1_201609.json",
+        "normalized/nsxusd_m1_201610.json",
+        "normalized/nsxusd_m1_201611.json",
+        "normalized/nsxusd_m1_201612.json"
+      ],
+      "bars": 341629,
+      "minTimestamp": 1451844060000,
+      "maxTimestamp": 1483117080000
+    },
+    {
+      "year": 2017,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2017.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201701.json",
+        "normalized/nsxusd_m1_201702.json",
+        "normalized/nsxusd_m1_201703.json",
+        "normalized/nsxusd_m1_201704.json",
+        "normalized/nsxusd_m1_201705.json",
+        "normalized/nsxusd_m1_201706.json",
+        "normalized/nsxusd_m1_201707.json",
+        "normalized/nsxusd_m1_201708.json",
+        "normalized/nsxusd_m1_201709.json",
+        "normalized/nsxusd_m1_201710.json",
+        "normalized/nsxusd_m1_201711.json",
+        "normalized/nsxusd_m1_201712.json"
+      ],
+      "bars": 330380,
+      "minTimestamp": 1483380000000,
+      "maxTimestamp": 1514566680000
+    },
+    {
+      "year": 2018,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2018.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201801.json",
+        "normalized/nsxusd_m1_201802.json",
+        "normalized/nsxusd_m1_201803.json",
+        "normalized/nsxusd_m1_201804.json",
+        "normalized/nsxusd_m1_201805.json",
+        "normalized/nsxusd_m1_201806.json",
+        "normalized/nsxusd_m1_201807.json",
+        "normalized/nsxusd_m1_201808.json",
+        "normalized/nsxusd_m1_201809.json",
+        "normalized/nsxusd_m1_201810.json",
+        "normalized/nsxusd_m1_201811.json",
+        "normalized/nsxusd_m1_201812.json"
+      ],
+      "bars": 348607,
+      "minTimestamp": 1514824200000,
+      "maxTimestamp": 1546272780000
+    },
+    {
+      "year": 2019,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2019.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_201901.json",
+        "normalized/nsxusd_m1_201902.json",
+        "normalized/nsxusd_m1_201903.json",
+        "normalized/nsxusd_m1_201904.json",
+        "normalized/nsxusd_m1_201905.json",
+        "normalized/nsxusd_m1_201906.json",
+        "normalized/nsxusd_m1_201907.json",
+        "normalized/nsxusd_m1_201908.json",
+        "normalized/nsxusd_m1_201909.json",
+        "normalized/nsxusd_m1_201910.json",
+        "normalized/nsxusd_m1_201911.json",
+        "normalized/nsxusd_m1_201912.json"
+      ],
+      "bars": 341335,
+      "minTimestamp": 1546365600000,
+      "maxTimestamp": 1577808780000
+    },
+    {
+      "year": 2020,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2020.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_202001.json",
+        "normalized/nsxusd_m1_202002.json",
+        "normalized/nsxusd_m1_202003.json",
+        "normalized/nsxusd_m1_202004.json",
+        "normalized/nsxusd_m1_202005.json",
+        "normalized/nsxusd_m1_202006.json",
+        "normalized/nsxusd_m1_202007.json",
+        "normalized/nsxusd_m1_202008.json",
+        "normalized/nsxusd_m1_202009.json",
+        "normalized/nsxusd_m1_202010.json",
+        "normalized/nsxusd_m1_202011.json",
+        "normalized/nsxusd_m1_202012.json"
+      ],
+      "bars": 339962,
+      "minTimestamp": 1577901600000,
+      "maxTimestamp": 1609431180000
+    },
+    {
+      "year": 2021,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2021.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_202101.json",
+        "normalized/nsxusd_m1_202102.json",
+        "normalized/nsxusd_m1_202103.json",
+        "normalized/nsxusd_m1_202104.json",
+        "normalized/nsxusd_m1_202105.json",
+        "normalized/nsxusd_m1_202106.json",
+        "normalized/nsxusd_m1_202107.json",
+        "normalized/nsxusd_m1_202108.json",
+        "normalized/nsxusd_m1_202109.json",
+        "normalized/nsxusd_m1_202110.json",
+        "normalized/nsxusd_m1_202111.json",
+        "normalized/nsxusd_m1_202112.json"
+      ],
+      "bars": 342946,
+      "minTimestamp": 1609696800000,
+      "maxTimestamp": 1640967180000
+    },
+    {
+      "year": 2022,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2022.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_202201.json",
+        "normalized/nsxusd_m1_202202.json",
+        "normalized/nsxusd_m1_202203.json",
+        "normalized/nsxusd_m1_202204.json",
+        "normalized/nsxusd_m1_202205.json",
+        "normalized/nsxusd_m1_202206.json",
+        "normalized/nsxusd_m1_202207.json",
+        "normalized/nsxusd_m1_202208.json",
+        "normalized/nsxusd_m1_202209.json",
+        "normalized/nsxusd_m1_202210.json",
+        "normalized/nsxusd_m1_202211.json",
+        "normalized/nsxusd_m1_202212.json"
+      ],
+      "bars": 342711,
+      "minTimestamp": 1641146400000,
+      "maxTimestamp": 1672416720000
+    },
+    {
+      "year": 2023,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2023.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_202301.json",
+        "normalized/nsxusd_m1_202302.json",
+        "normalized/nsxusd_m1_202303.json",
+        "normalized/nsxusd_m1_202304.json",
+        "normalized/nsxusd_m1_202305.json",
+        "normalized/nsxusd_m1_202306.json",
+        "normalized/nsxusd_m1_202307.json",
+        "normalized/nsxusd_m1_202308.json",
+        "normalized/nsxusd_m1_202309.json",
+        "normalized/nsxusd_m1_202310.json",
+        "normalized/nsxusd_m1_202311.json",
+        "normalized/nsxusd_m1_202312.json"
+      ],
+      "bars": 299289,
+      "minTimestamp": 1672682400000,
+      "maxTimestamp": 1703866320000
+    },
+    {
+      "year": 2024,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2024.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_202401.json",
+        "normalized/nsxusd_m1_202402.json",
+        "normalized/nsxusd_m1_202403.json",
+        "normalized/nsxusd_m1_202404.json",
+        "normalized/nsxusd_m1_202405.json",
+        "normalized/nsxusd_m1_202406.json",
+        "normalized/nsxusd_m1_202407.json",
+        "normalized/nsxusd_m1_202408.json",
+        "normalized/nsxusd_m1_202409.json",
+        "normalized/nsxusd_m1_202410.json",
+        "normalized/nsxusd_m1_202411.json",
+        "normalized/nsxusd_m1_202412.json"
+      ],
+      "bars": 340926,
+      "minTimestamp": 1704132000000,
+      "maxTimestamp": 1735661520000
+    },
+    {
+      "year": 2025,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_2025.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_202501.json",
+        "normalized/nsxusd_m1_202502.json",
+        "normalized/nsxusd_m1_202503.json",
+        "normalized/nsxusd_m1_202504.json",
+        "normalized/nsxusd_m1_202505.json",
+        "normalized/nsxusd_m1_202506.json",
+        "normalized/nsxusd_m1_202507.json",
+        "normalized/nsxusd_m1_202508.json",
+        "normalized/nsxusd_m1_202509.json",
+        "normalized/nsxusd_m1_202510.json",
+        "normalized/nsxusd_m1_202511.json",
+        "normalized/nsxusd_m1_202512.json"
+      ],
+      "bars": 340493,
+      "minTimestamp": 1735754400000,
+      "maxTimestamp": 1767197520000
+    },
+    {
+      "year": 2026,
+      "sourceFiles": [
+        "raw-csv/DAT_ASCII_NSXUSD_M1_202601.csv",
+        "raw-csv/DAT_ASCII_NSXUSD_M1_202602.csv"
+      ],
+      "normalizedMonths": [
+        "normalized/nsxusd_m1_202601.json",
+        "normalized/nsxusd_m1_202602.json"
+      ],
+      "bars": 41183,
+      "minTimestamp": 1767290400000,
+      "maxTimestamp": 1770999180000
+    }
+  ],
+  "sources": {
+    "zipFiles": [
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2010.zip",
+        "sha256": "4414870d1dca686af85d7fa58346c9772971600a67a6c7d07d9978d1558968b0",
+        "sizeBytes": 317711,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2011.zip",
+        "sha256": "80d38b149989c76f72cf7f668acb329cbc08118ac3ef4c5ec28226a97dd3c385",
+        "sizeBytes": 2683933,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2012.zip",
+        "sha256": "a9c25d0c3e26fe259bd2b539212a94d3e9f74220c044b33f96c107bca11ce072",
+        "sizeBytes": 2613631,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2013.zip",
+        "sha256": "7474da49bbe002a661ea0f3186578a84061685c8eaa7fda27e2b48b7eac6351d",
+        "sizeBytes": 2521561,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2014.zip",
+        "sha256": "3a2c5335f90ce30efe5c485aedb16300ccabd88b26c6df6b02e19229c2ac470f",
+        "sizeBytes": 2714257,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2015.zip",
+        "sha256": "b3d1c62f1a02b971fbc69f84ad31ff0d21e533b648c2ce1efe694488947cfee3",
+        "sizeBytes": 3173641,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2016.zip",
+        "sha256": "c78457c386eb5cd17cae4ec77f8fedf19ae37add2fafb3e4e3cbf97e9d3c8c19",
+        "sizeBytes": 3142300,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2017.zip",
+        "sha256": "162b6e8b54b16dc67a31072c89cb7a48066920c7f61f513d3b2ffcce8b625213",
+        "sizeBytes": 3005614,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2018.zip",
+        "sha256": "0cab833575b5967f08718a5ad869a85aa5e5c408fbbe725c01925b1da44ef34f",
+        "sizeBytes": 3560115,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2019.zip",
+        "sha256": "f7e0ac7ce964c864793c8928058cef11d1a886c68876f42b3e42d5bc61732698",
+        "sizeBytes": 3929822,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2020.zip",
+        "sha256": "896ff362259e56468f7a8acd32afa4dc21c309cf13a84e2c3e585dea0be4df84",
+        "sizeBytes": 4782514,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2021.zip",
+        "sha256": "ea22aa9f9a10f234cde03428f8117b2725e550f45ca17eb95fb1e4a9792c2977",
+        "sizeBytes": 4941583,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2022.zip",
+        "sha256": "b6bfac92a74c36719812014a38ce8cfcad05b4f15aca0d0e9e0dc1b1b3a098e7",
+        "sizeBytes": 5127487,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2023.zip",
+        "sha256": "0282f3b419c254d168c5dba86cdcfe6527f0d4ad32dd407a401d9367e2520ecc",
+        "sizeBytes": 4285675,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2024.zip",
+        "sha256": "70429c487544991e42d34ce505be00b2d02b74a6633b23ca07eba0f80bf24566",
+        "sizeBytes": 5195055,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_2025.zip",
+        "sha256": "865006539b7a3abe6ce3742e17604e5bf003b89583b349228570d343f78ae16f",
+        "sizeBytes": 5327460,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_202601.zip",
+        "sha256": "62d23149b48dffeff745915087563f8a712eca4cb3f557376fc53d34071245af",
+        "sizeBytes": 445108,
+        "rows": 0
+      },
+      {
+        "file": "raw-zips/HISTDATA_COM_ASCII_NSXUSD_M1_202602.zip",
+        "sha256": "7a7a5586962017af3336228c0cf4c571000bcdc4deaa37c30c6fb41c1cb88f37",
+        "sizeBytes": 220354,
+        "rows": 0
+      }
+    ],
+    "csvFiles": [
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2010.csv",
+        "sha256": "9f9ac3ad23eee74b27b77bdc274d728fafae3157064a2c8bd407ec565c056be6",
+        "sizeBytes": 2696430,
+        "rows": 40855
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2011.csv",
+        "sha256": "e286f0ea945bc4decf59c8654b8cd7960167f15426538425a7d85d1e254e142c",
+        "sizeBytes": 21888834,
+        "rows": 331649
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2012.csv",
+        "sha256": "b41655f7e9b0e8f79b4fd4086e5ed3c2192839583ac93126378f16bc44defbe3",
+        "sizeBytes": 21453234,
+        "rows": 325049
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2013.csv",
+        "sha256": "aa21535ccfe8a93ff5575a0f2e573034133127c1e5395e7124cf581785ff8c04",
+        "sizeBytes": 20775084,
+        "rows": 314774
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2014.csv",
+        "sha256": "ae5bedc8fbf25e51d9acf48953d586ddad9a347c346689b5b6c68ddaaee24dac",
+        "sizeBytes": 21045618,
+        "rows": 318873
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2015.csv",
+        "sha256": "36bab52f5d1c5e16c69adab3c99c82936de1a5849b2fa8d7b61dc423b3467e6d",
+        "sizeBytes": 22126962,
+        "rows": 335257
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2016.csv",
+        "sha256": "e13817061612fafc1775b3f3624d45a911bd665d556e1a2f3a6ef8734488fa68",
+        "sizeBytes": 22547514,
+        "rows": 341629
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2017.csv",
+        "sha256": "379a78a8889a82a42a1ca06c41372de2f2d5568e317249b116a0ec30d4b56014",
+        "sizeBytes": 21805080,
+        "rows": 330380
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2018.csv",
+        "sha256": "aa6797c08d699d2c9c763e5f3546759bf3fd8d1645298fe3f911366227dc7844",
+        "sizeBytes": 23008062,
+        "rows": 348607
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2019.csv",
+        "sha256": "2de65ed60a66fa188e2c0236152da7fd2ba370fb48ee8bbe17fe5c0fb8539236",
+        "sizeBytes": 22532070,
+        "rows": 341395
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2020.csv",
+        "sha256": "699e8f1550b4aaf67086be754f16db2b2e488b3bdc9ecd06fa9a7485bc6151f8",
+        "sizeBytes": 23170511,
+        "rows": 340022
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2021.csv",
+        "sha256": "c23bd0d839058f9ae2dcb8fb9ba8d5a6105d37b6d0a30ef6b7f67ac730b846c0",
+        "sizeBytes": 24010420,
+        "rows": 343006
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2022.csv",
+        "sha256": "654ba5a46708c97f00a7c7a5a7882df60a419f4d76f9db1cb67553dbae5f3b75",
+        "sizeBytes": 23993970,
+        "rows": 342771
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2023.csv",
+        "sha256": "c388bcbae5f91908994408fe93289e85ed6f9417defc60a89a6210ecd0135497",
+        "sizeBytes": 20954430,
+        "rows": 299349
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2024.csv",
+        "sha256": "1a4626447800c37ebbff816a6775066551efe9261bcd85dee96ba57ecffae9a4",
+        "sizeBytes": 23869020,
+        "rows": 340986
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_2025.csv",
+        "sha256": "43e665b480ba967db0d7000dfa8f17e9e0c894391935830560c12ef6ef7a1f46",
+        "sizeBytes": 23838710,
+        "rows": 340553
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_202601.csv",
+        "sha256": "8857951393b6430aa2eb5e2275615a0b08e4c44e4508434891f9776ebb09b619",
+        "sizeBytes": 1948590,
+        "rows": 27837
+      },
+      {
+        "file": "raw-csv/DAT_ASCII_NSXUSD_M1_202602.csv",
+        "sha256": "9bad5b0ab31b1683efdf1ce502c2acf575557f8e8951945a9b05df71cbfffbaa",
+        "sizeBytes": 934220,
+        "rows": 13346
+      }
+    ]
+  }
+}
