@@ -39,6 +39,16 @@
 - Order validation now blocks over-risked entries when open risk + trade risk exceeds equity.
 - Risk-focused UX flow tightened for discretionary risk-defined execution.
 
+## [0.6.0] - 2026-02-17
+
+### Added
+- Milestone 4 backend compatibility updates:
+  - `/api/data/:pair/:from/:to` now accepts `timeframe` and `sessionId` query params.
+  - Optional server-side timeframe aggregation path added for parity/debug scenarios.
+
+### Changed
+- Data route now returns normalized response including selected timeframe/session context.
+
 ## [0.2.0] - 2026-02-16
 
 ### Added

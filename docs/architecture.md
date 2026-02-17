@@ -44,6 +44,12 @@ Backend (Bun + Hono)
 3. Risk checks evaluate open risk + proposed risk before execution.
 4. Account metrics panel updates continuously from store state (`balance/equity/openRisk/exposure/maxDD`).
 
+## Timeframe Request Contract (Milestone 4)
+- Endpoint: `GET /api/data/:pair/:from/:to?timeframe=<TF>&sessionId=<ID>`
+- `timeframe` supports `M1/M5/M15/H1/H4/D1`.
+- Response includes `timeframe` and `sessionId` echo for traceability.
+- Frontend remains M1-source-first and may use server aggregation for parity/debug workflows.
+
 ## Request Flow (`/api/data/:pair/:from/:to`)
 1. Normalize pair (`NSXUSD` -> `NAS100`).
 2. Check Redis cache (fast-fail if Redis unavailable).

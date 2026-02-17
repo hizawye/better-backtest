@@ -209,3 +209,13 @@
 **Rationale**:
 - Risk-aware discretionary decisions need live visibility of open risk and exposure.
 - Explicit max-drawdown/open-risk feedback helps avoid accidental overleveraging.
+
+---
+
+## 2026-02-17 - Milestone 4 Timeframe Request Parity
+
+**Decision**: Add optional `timeframe` and `sessionId` query params to data route
+**Rationale**:
+- Keeps backend observability aligned with session-centric replay architecture.
+- Allows deterministic tracing of replay requests by session/run context.
+- Enables optional server-side aggregation for debugging/parity without forcing a frontend rewrite.

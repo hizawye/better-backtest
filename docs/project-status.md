@@ -1,12 +1,11 @@
 # Project Status
 
-Last Updated: 2026-02-17 (Milestone 3)
+Last Updated: 2026-02-17 (Milestone 4)
 
 ## Current Progress
-- Milestone 3 complete: risk-defined execution UX and guardrails are in place.
-- Account metrics panel now exposes live balance/equity/open-risk/used-risk/exposure/max DD.
-- Order entry guardrails validate limit/stop direction against live market context.
-- Combined risk checks now reject trades that push open risk beyond equity.
+- Milestone 4 complete: multi-timeframe replay path now has backend trace/aggregation compatibility.
+- Data route accepts `timeframe` and `sessionId` query params for deterministic request tracing.
+- Optional server-side aggregation path is available while frontend keeps M1-first aggregation/caching.
 
 ## Verification Status
 - `npm run test:frontend` passes (`9` tests: execution, pnl, risk, aggregation, lifecycle).
@@ -19,6 +18,5 @@ Last Updated: 2026-02-17 (Milestone 3)
 - `packages/frontend/tsconfig.json` still has a pre-existing include/path warning from Svelte tooling.
 
 ## Next Immediate Starting Point
-1. Finalize Milestone 4 resilience details for timeframe switching and replay seek continuity.
-2. Expand Milestone 5 journaling/analytics coverage and exports.
-3. Run Milestone 6 hardening pass and release-readiness checks.
+1. Expand Milestone 5 journaling/analytics coverage and exports.
+2. Run Milestone 6 hardening pass and release-readiness checks.
