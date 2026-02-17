@@ -14,6 +14,20 @@
 - Market data load is now date-range-driven and timeframe-aware instead of fixed 7-day replay only.
 - Store contract now includes session identity, range/timeframe state, and execution config.
 
+## [0.4.0] - 2026-02-17
+
+### Added
+- Milestone 2 execution realism and lifecycle controls:
+  - Pending order lifecycle for `limit`/`stop`: place, amend, cancel, fill.
+  - Tick/bar-trigger semantics using bar high/low evaluation for pending fills and SL/TP.
+  - Session event log model and event panel for deterministic lifecycle trace.
+  - Manual close actions expanded with partial close, close all, and break-even helper.
+
+### Changed
+- PnL engine now includes commission/slippage-aware close accounting and close reasons.
+- Trade page replay loop now processes pending/SL/TP lifecycle deterministically each bar.
+- Session persistence now includes event log snapshots alongside orders/positions/trades.
+
 ## [0.2.0] - 2026-02-16
 
 ### Added

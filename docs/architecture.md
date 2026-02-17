@@ -30,6 +30,14 @@ Backend (Bun + Hono)
 5. Resume replay with persisted snapshot (balance/equity/index + entities).
 6. Save updated session/snapshot/entities on explicit save and on page teardown.
 
+## Execution Flow (Milestone 2)
+1. Replay worker emits bar/tick payload.
+2. Pending orders are evaluated against bar high/low semantics.
+3. Filled orders open positions with execution config (spread/slippage/commission assumptions).
+4. Open positions are evaluated for SL/TP hits on each replay bar.
+5. Realized trades update balance/equity and append deterministic session event log entries.
+6. Session state persists entities + event log for resume/audit.
+
 ## Request Flow (`/api/data/:pair/:from/:to`)
 1. Normalize pair (`NSXUSD` -> `NAS100`).
 2. Check Redis cache (fast-fail if Redis unavailable).

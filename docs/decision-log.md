@@ -174,3 +174,24 @@
 - Avoids backend contract churn while milestone sequence is still evolving.
 - Keeps replay loop deterministic against a single loaded source bar set.
 - Enables `M1/M5/M15/H1/H4/D1` without changing existing NAS100 data route semantics.
+
+---
+
+## 2026-02-17 - Milestone 2 Realistic Execution Lifecycle
+
+**Decision**: Evaluate pending orders and SL/TP using bar high/low semantics
+**Rationale**:
+- Manual backtest realism requires trigger checks beyond close-only ticks.
+- Deterministic high/low evaluation better approximates real trigger behavior.
+- Keeps replay deterministic while remaining computationally cheap.
+
+**Decision**: Add deterministic session event log in local persistence
+**Rationale**:
+- Backtest audits need a reproducible execution trail for fills/cancels/closes.
+- Event sequences support debugging mismatched PnL or lifecycle behavior.
+- Local event persistence keeps MVP fully offline and resumable.
+
+**Decision**: Implement partial close and close-all at position layer
+**Rationale**:
+- Discretionary workflows commonly scale out and flatten across multiple positions.
+- Encoding this in engine/state avoids duplicated UI-side accounting logic.

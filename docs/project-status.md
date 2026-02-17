@@ -1,24 +1,25 @@
 # Project Status
 
-Last Updated: 2026-02-17 (Milestone 1)
+Last Updated: 2026-02-17 (Milestone 2)
 
 ## Current Progress
-- Milestone 1 complete: session-centric backtest core is live on frontend.
-- Session model is now persisted in IndexedDB (session metadata + snapshots + session entities).
-- Replay controls now support session load/create/save, timeframe selection, and custom date range.
-- Bars are loaded for configured range and aggregated to selected timeframe (`M1/M5/M15/H1/H4/D1`).
-- Existing NAS100 local-data backend path remains intact.
+- Milestone 2 complete: realistic order/execution lifecycle is implemented and wired to replay loop.
+- Pending `limit/stop` orders support place/amend/cancel/fill flow with session event logging.
+- Auto SL/TP close logic now evaluates on replay bars and closes with cost-aware realized PnL.
+- Manual close actions now include close, partial close, close all, and break-even helper.
+- Session persistence now includes deterministic event history per session.
 
 ## Verification Status
+- `npm run test:frontend` passes (`9` tests: execution, pnl, risk, aggregation, lifecycle).
 - `npm run build:frontend` passes.
 - `npm run build:backend` passes.
 - `cd packages/frontend && npm run check` passes with existing tsconfig warning (pre-existing).
 
 ## Blockers / Bugs
-- No blockers for Milestone 2 start.
-- Session snapshot restore currently applies replay index after bar reload; deeper deterministic seek handling is planned for Milestone 2 replay lifecycle work.
+- No functional blockers.
+- `packages/frontend/tsconfig.json` still has a pre-existing include/path warning from Svelte tooling.
 
 ## Next Immediate Starting Point
-1. Start Milestone 2: realistic order lifecycle (limit/stop trigger path + SL/TP auto-close).
-2. Extend order/position/trade engines with slippage + commission accounting.
-3. Persist session event lifecycle and validate with integration-level execution scenarios.
+1. Execute Milestone 3 refinements: risk-% UX polish and stricter guardrails.
+2. Finalize Milestone 4 resilience details for timeframe switching and replay seek continuity.
+3. Expand Milestone 5 journaling/analytics coverage and exports.
