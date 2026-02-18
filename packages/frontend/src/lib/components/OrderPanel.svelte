@@ -539,20 +539,19 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    background: #0f161f;
+    background: var(--surface-0);
+    border-radius: var(--radius-md);
   }
 
   .panel-header {
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border-subtle);
-    background: #101824;
+    padding: 12px 14px 8px;
   }
 
   .panel-header h3 {
     margin: 0;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.45px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
     color: var(--text-hi);
   }
@@ -560,29 +559,33 @@
   .panel-body {
     flex: 1;
     overflow: auto;
-    padding: 8px 10px 10px;
+    padding: 0 12px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
   }
 
   .price-display {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    border: 1px solid rgba(51, 65, 85, 0.5);
-    background: #101824;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface-1);
   }
 
-  .bid, .ask, .spread {
+  .bid,
+  .ask,
+  .spread {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 7px 8px;
-    border-left: 1px solid rgba(51, 65, 85, 0.45);
+    gap: 4px;
+    padding: 9px 10px;
+    background: rgba(20, 30, 45, 0.72);
+    box-shadow: inset 1px 0 0 rgba(132, 164, 204, 0.18);
   }
 
   .bid {
-    border-left: none;
+    box-shadow: none;
   }
 
   .label {
@@ -594,8 +597,8 @@
 
   .price {
     font-size: 14px;
-    font-weight: 600;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   .buy-price {
@@ -607,22 +610,19 @@
   }
 
   .value {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-hi);
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   .form-group {
     display: grid;
-    grid-template-columns: 128px minmax(0, 1fr);
+    grid-template-columns: 124px minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
-    padding: 5px 0;
-    border-top: 1px solid rgba(51, 65, 85, 0.35);
-  }
-
-  .form-group:first-of-type {
-    border-top: 1px solid rgba(51, 65, 85, 0.45);
+    gap: 10px;
+    padding: 8px 9px;
+    border-radius: 10px;
+    background: var(--surface-1);
   }
 
   .form-group label {
@@ -636,52 +636,57 @@
   .form-group input,
   .form-group select {
     width: 100%;
-    padding: 7px 8px;
-    background: #111923;
-    border: 1px solid var(--border-subtle);
+    padding: 7px 9px;
+    background: rgba(15, 25, 38, 0.92);
+    border: none;
+    box-shadow: inset 0 0 0 1px var(--line-soft);
+    border-radius: 8px;
     color: var(--text-hi);
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .form-group input:focus,
   .form-group select:focus {
-    border-color: var(--accent);
-    outline: 2px solid rgba(76, 141, 255, 0.4);
-    outline-offset: 1px;
+    box-shadow: inset 0 0 0 1px rgba(112, 171, 255, 0.75), var(--focus-ring);
+    outline: none;
   }
 
   .form-error {
     color: var(--bear);
-    font-size: 11px;
-    padding: 6px 8px;
-    border: 1px solid rgba(240, 91, 110, 0.35);
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 9px;
     background: rgba(240, 91, 110, 0.12);
   }
 
   .action-buttons {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-top: 4px;
+    gap: 8px;
+    margin-top: 2px;
     position: sticky;
     bottom: 0;
     padding: 8px 0 0;
-    border-top: 1px solid rgba(51, 65, 85, 0.45);
-    background: #0f161f;
+    background: linear-gradient(180deg, rgba(7, 12, 20, 0), rgba(7, 12, 20, 0.88) 24%, rgba(7, 12, 20, 0.95) 100%);
     z-index: 2;
   }
 
   .btn {
-    padding: 10px 8px;
-    font-weight: 600;
+    padding: 11px 9px;
+    border-radius: 10px;
+    font-weight: 700;
     font-size: 11px;
-    transition: filter 0.15s;
+    transition: filter var(--motion-fast), transform var(--motion-fast);
     text-transform: uppercase;
     letter-spacing: 0.45px;
   }
 
   .btn:hover {
     filter: brightness(1.06);
+  }
+
+  .btn:active {
+    transform: translateY(1px);
   }
 
   .btn-buy {
@@ -697,21 +702,23 @@
   .btn-amend {
     background: var(--accent);
     color: white;
-    padding: 9px 10px;
+    padding: 10px 10px;
+    border-radius: 10px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .pending-orders {
-    border-top: 1px solid rgba(51, 65, 85, 0.45);
-    padding-top: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--surface-1);
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
 
   .pending-orders h4 {
-    margin: 0 0 4px 0;
+    margin: 0 0 2px 0;
     font-size: 10px;
     color: var(--text-mid);
     text-transform: uppercase;
@@ -725,51 +732,45 @@
     align-items: center;
     font-size: 10px;
     color: var(--text-mid);
-    padding: 6px 0;
-    border-top: 1px solid rgba(51, 65, 85, 0.3);
-  }
-
-  .pending-row:first-of-type {
-    border-top: none;
+    padding: 7px 8px;
+    border-radius: 8px;
+    background: rgba(17, 29, 43, 0.84);
   }
 
   .pending-row.selected {
-    background: rgba(76, 141, 255, 0.14);
+    background: rgba(76, 141, 255, 0.2);
   }
 
   .btn-mini {
     font-size: 10px;
-    padding: 4px 7px;
-    background: #1a2431;
+    padding: 4px 8px;
+    background: rgba(66, 101, 141, 0.34);
     color: var(--text-hi);
-    border-radius: 5px;
-    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    font-weight: 600;
   }
 
   .btn-mini.danger {
     color: var(--bear);
+    background: rgba(240, 91, 110, 0.17);
   }
 
   .account-info {
     margin-top: 2px;
-    border-top: 1px solid rgba(51, 65, 85, 0.45);
-    border-bottom: 1px solid rgba(51, 65, 85, 0.45);
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--surface-1);
     display: flex;
     flex-direction: column;
-    gap: 0;
+    gap: 2px;
   }
 
   .info-row {
     display: flex;
     justify-content: space-between;
-    font-size: 10px;
+    font-size: 11px;
     gap: 8px;
     padding: 5px 0;
-    border-top: 1px solid rgba(51, 65, 85, 0.3);
-  }
-
-  .info-row:first-child {
-    border-top: none;
   }
 
   .info-row span:first-child {
@@ -787,7 +788,7 @@
   @media (max-width: 1199px) {
     .form-group {
       grid-template-columns: 1fr;
-      gap: 4px;
+      gap: 5px;
     }
   }
 </style>

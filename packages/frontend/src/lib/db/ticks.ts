@@ -4,6 +4,7 @@ import type {
   AnalyticsSnapshot,
   BacktestSession,
   Bar,
+  DrawingEngineSnapshotV1,
   DrawingEntity,
   DrawingStyle,
   DrawingToolType,
@@ -68,6 +69,16 @@ interface WorkspacePrefsRecord {
   bottomDrawerOpen: boolean;
   bottomDrawerTab: WorkspacePrefs['bottomDrawerTab'];
   compactToolbar: boolean;
+  toolDockOpen: boolean;
+  toolDockSection: WorkspacePrefs['toolDockSection'];
+  updatedAt: number;
+}
+
+interface DrawingSnapshotRecord {
+  id: string;
+  sessionId: string;
+  pair: TradingPair;
+  snapshot: DrawingEngineSnapshotV1;
   updatedAt: number;
 }
 
@@ -93,6 +104,7 @@ const db = new Dexie('BetterBacktest') as Dexie & {
   attachments: EntityTable<Attachment, 'id'>;
   analyticsSnapshots: EntityTable<AnalyticsSnapshot, 'id'>;
   drawings: EntityTable<DrawingEntity, 'id'>;
+  drawingSnapshots: EntityTable<DrawingSnapshotRecord, 'id'>;
   toolPrefs: EntityTable<ToolPrefsRecord, 'id'>;
   workspacePrefs: EntityTable<WorkspacePrefsRecord, 'id'>;
 };
@@ -155,6 +167,24 @@ db.version(5).stores({
   attachments: 'id, sessionId, journalEntryId, createdAt',
   analyticsSnapshots: 'id, sessionId, createdAt',
   drawings: 'id, sessionId, pair, tool, updatedAt, [sessionId+pair]',
+  toolPrefs: 'id, sessionId, updatedAt',
+  workspacePrefs: 'id, sessionId, updatedAt'
+});
+
+db.version(6).stores({
+  bars: 'id, pair, timestamp',
+  aggregatedBars: 'id, sessionId, pair, timeframe, timestamp',
+  sessions: 'id, updatedAt, pair, timeframe, from, to',
+  snapshots: 'sessionId, savedAt',
+  orders: 'id, sessionId, status, createdAt',
+  positions: 'id, sessionId, entryTime',
+  trades: 'id, sessionId, exitTime',
+  sessionEvents: 'id, sessionId, sequence, timestamp, type',
+  journalEntries: 'id, sessionId, timestamp, reviewStatus',
+  attachments: 'id, sessionId, journalEntryId, createdAt',
+  analyticsSnapshots: 'id, sessionId, createdAt',
+  drawings: 'id, sessionId, pair, tool, updatedAt, [sessionId+pair]',
+  drawingSnapshots: 'id, sessionId, pair, updatedAt, [sessionId+pair]',
   toolPrefs: 'id, sessionId, updatedAt',
   workspacePrefs: 'id, sessionId, updatedAt'
 });
@@ -399,6 +429,35 @@ export async function getDrawings(sessionId: string, pair: TradingPair): Promise
   return drawings.sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0) || a.updatedAt - b.updatedAt);
 }
 
+export async function saveDrawingSnapshot(
+  sessionId: string,
+  pair: TradingPair,
+  snapshot: DrawingEngineSnapshotV1 | null
+): Promise<void> {
+  const id = `drawingsnapshot_${sessionId}_${pair}`;
+  if (!snapshot) {
+    await db.drawingSnapshots.delete(id);
+    return;
+  }
+
+  await db.drawingSnapshots.put({
+    id,
+    sessionId,
+    pair,
+    snapshot,
+    updatedAt: Date.now()
+  });
+}
+
+export async function getDrawingSnapshot(
+  sessionId: string,
+  pair: TradingPair
+): Promise<DrawingEngineSnapshotV1 | undefined> {
+  const id = `drawingsnapshot_${sessionId}_${pair}`;
+  const record = await db.drawingSnapshots.get(id);
+  return record?.snapshot;
+}
+
 export async function saveToolPrefs(sessionId: string, prefs: ToolPrefsPayload): Promise<void> {
   await db.toolPrefs.put({
     id: `toolprefs_${sessionId}`,
@@ -435,6 +494,8 @@ export async function saveWorkspacePrefs(
     bottomDrawerOpen: prefs.bottomDrawerOpen,
     bottomDrawerTab: prefs.bottomDrawerTab,
     compactToolbar: prefs.compactToolbar,
+    toolDockOpen: prefs.toolDockOpen,
+    toolDockSection: prefs.toolDockSection,
     updatedAt: Date.now()
   });
 }
@@ -448,7 +509,9 @@ export async function getWorkspacePrefs(sessionId: string): Promise<WorkspacePre
     rightDrawerTab: record.rightDrawerTab,
     bottomDrawerOpen: record.bottomDrawerOpen,
     bottomDrawerTab: record.bottomDrawerTab,
-    compactToolbar: record.compactToolbar
+    compactToolbar: record.compactToolbar,
+    toolDockOpen: record.toolDockOpen ?? true,
+    toolDockSection: record.toolDockSection ?? 'tools'
   };
 }
 

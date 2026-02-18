@@ -13,6 +13,7 @@ import type {
   Position,
   SessionEvent,
   Tick,
+  ToolDockSection,
   Timeframe,
   Trade,
   TradingPair,
@@ -50,6 +51,8 @@ interface TradingState {
   bottomDrawerOpen: boolean;
   bottomDrawerTab: WorkspaceBottomTab;
   compactToolbar: boolean;
+  toolDockOpen: boolean;
+  toolDockSection: ToolDockSection;
 
   // Trading
   positions: Position[];
@@ -110,6 +113,8 @@ interface TradingState {
   setBottomDrawerOpen: (open: boolean) => void;
   setBottomDrawerTab: (tab: WorkspaceBottomTab) => void;
   setCompactToolbar: (compact: boolean) => void;
+  setToolDockOpen: (open: boolean) => void;
+  setToolDockSection: (section: ToolDockSection) => void;
 
   setPositions: (positions: Position[]) => void;
   addPosition: (position: Position) => void;
@@ -177,6 +182,8 @@ const store = createStore<TradingState>((set) => ({
   bottomDrawerOpen: false,
   bottomDrawerTab: 'positions',
   compactToolbar: false,
+  toolDockOpen: true,
+  toolDockSection: 'tools',
 
   positions: [],
   orders: [],
@@ -259,6 +266,8 @@ const store = createStore<TradingState>((set) => ({
   setBottomDrawerOpen: (bottomDrawerOpen) => set({ bottomDrawerOpen }),
   setBottomDrawerTab: (bottomDrawerTab) => set({ bottomDrawerTab }),
   setCompactToolbar: (compactToolbar) => set({ compactToolbar }),
+  setToolDockOpen: (toolDockOpen) => set({ toolDockOpen }),
+  setToolDockSection: (toolDockSection) => set({ toolDockSection }),
 
   setPositions: (positions) => set({ positions }),
   addPosition: (position) =>
@@ -338,6 +347,8 @@ const store = createStore<TradingState>((set) => ({
       bottomDrawerOpen: false,
       bottomDrawerTab: 'positions',
       compactToolbar: false,
+      toolDockOpen: true,
+      toolDockSection: 'tools',
       positions: [],
       orders: [],
       trades: [],

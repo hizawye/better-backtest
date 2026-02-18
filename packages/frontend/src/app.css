@@ -1,23 +1,35 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg-root: #070c13;
-  --bg-panel: #0f1824;
-  --bg-elev: #142031;
-  --bg-soft: #1a2839;
-  --text-hi: #e5edf9;
-  --text-mid: #9eb1ca;
-  --text-low: #7287a3;
-  --border-subtle: #24374d;
-  --border-strong: #3d5573;
-  --accent: #4f8ede;
+  --bg-root: #070c14;
+  --bg-panel: #0e1723;
+  --bg-elev: #152236;
+  --bg-soft: #1d2c40;
+  --surface-0: rgba(12, 20, 31, 0.9);
+  --surface-1: rgba(22, 35, 53, 0.86);
+  --surface-2: rgba(32, 49, 72, 0.72);
+  --line-soft: rgba(132, 164, 204, 0.16);
+  --line-strong: rgba(132, 168, 211, 0.34);
+  --text-hi: #ebf3ff;
+  --text-mid: #a8bfdc;
+  --text-low: #7f98b6;
+  --border-subtle: #2c425d;
+  --border-strong: #466586;
+  --accent: #4e8fdf;
   --bull: #14b87a;
   --bear: #f05b6e;
   --warn: #f3b35a;
-  --radius-sm: 7px;
-  --radius-md: 12px;
-  --shadow-soft: 0 8px 24px rgba(4, 9, 16, 0.35);
+  --radius-sm: 9px;
+  --radius-md: 14px;
+  --shadow-soft: 0 10px 30px rgba(4, 9, 16, 0.42);
+  --elev-1: 0 8px 28px rgba(3, 8, 14, 0.46);
+  --elev-2: 0 16px 42px rgba(3, 8, 14, 0.58);
   --motion-fast: 140ms;
+  --control-bg: rgba(53, 80, 112, 0.38);
+  --control-bg-hover: rgba(66, 102, 144, 0.46);
+  --control-active: rgba(78, 136, 217, 0.46);
+  --control-radius: 10px;
+  --focus-ring: 0 0 0 2px rgba(112, 171, 255, 0.72);
   --bg-primary: var(--bg-root);
   --bg-secondary: var(--bg-panel);
   --bg-tertiary: var(--bg-elev);
@@ -38,18 +50,38 @@ body {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(98, 129, 165, 0.54) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(98, 129, 165, 0.5);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(122, 159, 202, 0.7);
 }
 
 body {
-  font-family: 'IBM Plex Sans', 'Inter', 'Segoe UI', sans-serif;
+  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
   background:
-    radial-gradient(circle at 18% -10%, rgba(48, 92, 145, 0.2), transparent 42%),
-    radial-gradient(circle at 90% -25%, rgba(52, 118, 188, 0.16), transparent 48%),
-    linear-gradient(180deg, #070b11 0%, #080d14 100%);
+    radial-gradient(circle at 16% -10%, rgba(68, 123, 189, 0.24), transparent 40%),
+    radial-gradient(circle at 94% -18%, rgba(65, 145, 228, 0.14), transparent 48%),
+    linear-gradient(180deg, #070b12 0%, #080d16 100%);
   color: var(--text-hi);
   line-height: 1.4;
   min-height: 100dvh;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 button {
@@ -81,8 +113,7 @@ input, select {
 }
 
 .header {
-  background: linear-gradient(180deg, rgba(13, 22, 34, 0.98), rgba(10, 17, 26, 0.94));
-  border-bottom: 1px solid rgba(98, 124, 158, 0.16);
+  background: linear-gradient(180deg, rgba(13, 22, 34, 0.94), rgba(10, 17, 26, 0.86));
   padding: 0 14px;
   display: flex;
   align-items: center;
@@ -101,10 +132,9 @@ input, select {
 }
 
 .chart-area {
-  background: var(--bg-panel);
-  border: 1px solid rgba(89, 114, 144, 0.14);
+  background: var(--surface-0);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--elev-1);
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -112,13 +142,12 @@ input, select {
 }
 
 .side-panel {
-  background: var(--bg-panel);
-  border: 1px solid rgba(89, 114, 144, 0.14);
+  background: var(--surface-0);
   border-radius: var(--radius-md);
+  box-shadow: var(--elev-1);
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .bottom-panel {

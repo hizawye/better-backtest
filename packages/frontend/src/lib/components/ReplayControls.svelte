@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { tradingStore } from '../stores/trading';
   import type { BacktestSession, Bar, Timeframe, TradingPair } from '$shared/types';
   import { PAIR_LABELS } from '$shared/types';
@@ -33,6 +34,13 @@
   let fromInput = '';
   let toInput = '';
   let selectedSessionId = '';
+  type FoldGroup = 'market' | 'dates' | 'session';
+  const foldGroups: FoldGroup[] = ['market', 'dates', 'session'];
+  let controlsRoot: HTMLDivElement | null = null;
+  let marketFold: HTMLDetailsElement | null = null;
+  let datesFold: HTMLDetailsElement | null = null;
+  let sessionFold: HTMLDetailsElement | null = null;
+  let activeFold: FoldGroup | null = null;
   const speeds = [1, 5, 10, 25, 50, 100];
   const timeframes: Timeframe[] = ['M1', 'M5', 'M15', 'H1', 'H4', 'D1'];
   const KNOWN_INTERVALS = [
@@ -57,12 +65,20 @@
     if (value === null) return;
     selectedPair = value as TradingPair;
     onPairChange(selectedPair);
+    closeAllFolds();
   }
 
   function handleTimeframeChange(next: Timeframe) {
     if (selectedTimeframe === next) return;
     selectedTimeframe = next;
     onTimeframeChange(next);
+    closeAllFolds();
+  }
+
+  function handleTimeframeSelect(event: Event) {
+    const value = getSelectValue(event);
+    if (value === null) return;
+    handleTimeframeChange(value as Timeframe);
   }
 
   function toDateTimeInput(timestamp: number): string {
@@ -85,6 +101,7 @@
 
     if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) return;
     onDateRangeChange(from, to);
+    closeAllFolds();
   }
 
   function handleSessionChange(event: Event) {
@@ -93,7 +110,61 @@
     selectedSessionId = value;
     if (!selectedSessionId) return;
     onLoadSession(selectedSessionId);
+    closeAllFolds();
   }
+
+  function resolveFold(group: FoldGroup): HTMLDetailsElement | null {
+    if (group === 'market') return marketFold;
+    if (group === 'dates') return datesFold;
+    return sessionFold;
+  }
+
+  function closeAllFolds() {
+    for (const group of foldGroups) {
+      const fold = resolveFold(group);
+      if (fold?.open) {
+        fold.open = false;
+      }
+    }
+    activeFold = null;
+  }
+
+  function handleFoldToggle(group: FoldGroup) {
+    const fold = resolveFold(group);
+    if (!fold) return;
+    if (!fold.open) {
+      if (activeFold === group) activeFold = null;
+      return;
+    }
+
+    activeFold = group;
+    for (const candidate of foldGroups) {
+      if (candidate === group) continue;
+      const sibling = resolveFold(candidate);
+      if (sibling?.open) sibling.open = false;
+    }
+  }
+
+  function handleOutsidePointerDown(event: PointerEvent) {
+    if (!activeFold || !controlsRoot) return;
+    const target = event.target;
+    if (target instanceof Node && controlsRoot.contains(target)) return;
+    closeAllFolds();
+  }
+
+  function handleGlobalKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return;
+    closeAllFolds();
+  }
+
+  onMount(() => {
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    document.addEventListener('keydown', handleGlobalKeydown);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+      document.removeEventListener('keydown', handleGlobalKeydown);
+    };
+  });
 
   function handleSpeedChange(event: Event) {
     const value = getSelectValue(event);
@@ -137,10 +208,11 @@
   $: toInput = toDateTimeInput(rangeTo);
   $: if (activeSessionId !== selectedSessionId) selectedSessionId = activeSessionId;
   $: loadedInterval = intervalLabel(medianBarIntervalMs(bars));
+  $: rangeLabel = `${new Date(rangeFrom).toLocaleDateString()} - ${new Date(rangeTo).toLocaleDateString()}`;
 </script>
 
-<div class="replay-controls" class:dense>
-  <div class="cluster play-cluster">
+<div class="replay-controls" class:dense bind:this={controlsRoot}>
+  <div class="cluster transport-cluster">
     <button class="icon-btn" on:click={onPlayPause} title={isPlaying ? 'Pause' : 'Play'}>
       {#if isPlaying}
         ⏸
@@ -149,56 +221,78 @@
       {/if}
     </button>
     <button class="icon-btn" on:click={onReset} title="Reset">⏹</button>
-    <select id="speed-select" value={speed} on:change={handleSpeedChange} aria-label="Replay speed">
+    <select class="compact-select" id="speed-select" value={speed} on:change={handleSpeedChange} aria-label="Replay speed">
       {#each speeds as spd}
         <option value={spd}>{spd}x</option>
       {/each}
     </select>
   </div>
 
-  <div class="cluster timeframe-cluster">
-    {#each timeframes as tf}
-      <button
-        class="tf-pill mono"
-        class:active={selectedTimeframe === tf}
-        on:click={() => handleTimeframeChange(tf)}
-      >
-        {tf}
+  <details class="cluster fold-group market-group" bind:this={marketFold} on:toggle={() => handleFoldToggle('market')}>
+    <summary class="fold-trigger">
+      <span class="fold-title">Market</span>
+      <strong class="mono">{selectedPair} · {selectedTimeframe}</strong>
+    </summary>
+    <div class="fold-content">
+      <label class="fold-field">
+        <span>Instrument</span>
+        <select id="pair-select" value={selectedPair} on:change={handlePairChange} aria-label="Instrument">
+          <option value="NAS100">{PAIR_LABELS.NAS100}</option>
+        </select>
+      </label>
+      <label class="fold-field">
+        <span>Timeframe</span>
+        <select id="timeframe-select" value={selectedTimeframe} on:change={handleTimeframeSelect} aria-label="Timeframe">
+          {#each timeframes as tf}
+            <option value={tf}>{tf}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+  </details>
+
+  <details class="cluster fold-group date-group" bind:this={datesFold} on:toggle={() => handleFoldToggle('dates')}>
+    <summary class="fold-trigger">
+      <span class="fold-title">Dates</span>
+      <strong class="mono">{rangeLabel}</strong>
+    </summary>
+    <div class="fold-content">
+      <label class="fold-field">
+        <span>From</span>
+        <input id="range-from" type="datetime-local" bind:value={fromInput} aria-label="From" />
+      </label>
+      <label class="fold-field">
+        <span>To</span>
+        <input id="range-to" type="datetime-local" bind:value={toInput} aria-label="To" />
+      </label>
+      <button class="subtle-btn accent apply-range" on:click={applyDateRange} title="Apply date range">
+        Apply Range
       </button>
-    {/each}
-  </div>
+    </div>
+  </details>
 
-  <div class="cluster session-cluster">
-    <select id="session-select" value={selectedSessionId} on:change={handleSessionChange} aria-label="Session">
-      <option value="">Select session</option>
-      {#each sessions as session}
-        <option value={session.id}>{session.name}</option>
-      {/each}
-    </select>
-    <button class="subtle-btn icon-btn-small" on:click={onCreateSession} title="Create new session">
-      <span aria-hidden="true">＋</span>
-    </button>
-    <button class="subtle-btn icon-btn-small" on:click={onDuplicateSession} title="Duplicate current session">
-      <span aria-hidden="true">⧉</span>
-    </button>
-    <button class="subtle-btn icon-btn-small" on:click={onSaveSession} title="Save current session">
-      <span aria-hidden="true">◈</span>
-    </button>
-  </div>
-
-  <div class="cluster pair-cluster">
-    <select id="pair-select" value={selectedPair} on:change={handlePairChange} aria-label="Instrument">
-      <option value="NAS100">{PAIR_LABELS.NAS100}</option>
-    </select>
-  </div>
-
-  <div class="cluster range-cluster">
-    <input id="range-from" type="datetime-local" bind:value={fromInput} aria-label="From" />
-    <input id="range-to" type="datetime-local" bind:value={toInput} aria-label="To" />
-    <button class="subtle-btn accent icon-btn-small" on:click={applyDateRange} title="Apply date range">
-      <span aria-hidden="true">↻</span>
-    </button>
-  </div>
+  <details class="cluster fold-group session-group" bind:this={sessionFold} on:toggle={() => handleFoldToggle('session')}>
+    <summary class="fold-trigger">
+      <span class="fold-title">Session</span>
+      <strong class="mono">{selectedSessionId ? 'Loaded' : 'Select'}</strong>
+    </summary>
+    <div class="fold-content">
+      <label class="fold-field">
+        <span>Workspace</span>
+        <select id="session-select" value={selectedSessionId} on:change={handleSessionChange} aria-label="Session">
+          <option value="">Select session</option>
+          {#each sessions as session}
+            <option value={session.id}>{session.name}</option>
+          {/each}
+        </select>
+      </label>
+      <div class="session-actions">
+        <button class="subtle-btn" on:click={onCreateSession} title="Create new session">New</button>
+        <button class="subtle-btn" on:click={onDuplicateSession} title="Duplicate current session">Duplicate</button>
+        <button class="subtle-btn accent" on:click={onSaveSession} title="Save current session">Save</button>
+      </div>
+    </div>
+  </details>
 
   <div class="cluster progress-cluster">
     <div class="progress-bar">
@@ -219,139 +313,193 @@
   .replay-controls {
     display: flex;
     align-items: center;
-    flex-wrap: nowrap;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 4px;
     min-width: 0;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(114, 136, 166, 0.4) transparent;
+    overflow: visible;
   }
 
   .replay-controls.dense {
-    gap: 4px;
+    gap: 3px;
   }
 
   .cluster {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 3px;
-    border: 1px solid rgba(111, 144, 182, 0.12);
-    background: rgba(29, 46, 65, 0.38);
-    border-radius: 8px;
+    gap: 8px;
+    min-height: 34px;
+    padding: 0 9px;
+    background: transparent;
+    border-radius: 0;
     flex-shrink: 0;
+    box-shadow: none;
+    border-left: 1px solid rgba(112, 149, 189, 0.32);
   }
 
-  .play-cluster {
+  .transport-cluster {
+    border-left: 0;
+    padding-left: 0;
     padding-right: 8px;
   }
 
-  .session-cluster {
-    max-width: 320px;
+  .compact-select {
+    min-width: 66px;
   }
 
-  .session-cluster select {
-    min-width: 130px;
+  .fold-group {
+    position: relative;
+    padding-left: 6px;
+    min-height: 34px;
   }
 
-  .timeframe-cluster {
-    gap: 4px;
+  .fold-group[open] {
+    background: transparent;
   }
 
-  .pair-cluster select {
-    width: 105px;
+  .fold-trigger {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 9px;
+    border-radius: 8px;
+    color: #d4e3f8;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
   }
 
-  .range-cluster input {
-    width: 144px;
+  .fold-trigger::-webkit-details-marker {
+    display: none;
+  }
+
+  .fold-trigger::after {
+    content: '▾';
+    color: #7f9ab8;
+    font-size: 10px;
+    margin-left: 2px;
+    transition: transform 0.14s ease;
+  }
+
+  .fold-group[open] .fold-trigger::after {
+    transform: rotate(180deg);
+  }
+
+  .fold-title {
+    color: #86a0be;
+    font-size: 10px;
+    letter-spacing: 0.42px;
+    text-transform: uppercase;
+  }
+
+  .fold-content {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 290px;
+    background: rgba(8, 14, 22, 0.98);
+    border-radius: 10px;
+    padding: 10px 10px 11px;
+    display: grid;
+    gap: 8px;
+    box-shadow: 0 14px 28px rgba(2, 8, 14, 0.58);
+    border: 1px solid rgba(84, 118, 154, 0.34);
+    z-index: 35;
+  }
+
+  .date-group .fold-content {
+    width: 336px;
+  }
+
+  .fold-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 10px;
+    color: #8ea7c3;
+    text-transform: uppercase;
+    letter-spacing: 0.44px;
+  }
+
+  .session-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .apply-range {
+    min-height: 34px;
+    justify-content: center;
   }
 
   .progress-cluster {
-    min-width: 240px;
+    min-width: 250px;
     flex: 1;
-    max-width: 360px;
+    max-width: 400px;
     margin-left: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    border-left: 1px solid rgba(112, 149, 189, 0.32);
+    padding-left: 12px;
+    padding-right: 0;
   }
 
   .icon-btn,
   .subtle-btn,
-  .tf-pill,
   select,
   input {
-    border: 1px solid transparent;
-    background: rgba(44, 66, 90, 0.42);
-    color: #d9e7fa;
-    border-radius: 6px;
-    font-size: 10px;
+    border: 0;
+    background: rgba(43, 65, 91, 0.42);
+    color: #d6e6fd;
+    border-radius: 7px;
+    font-size: 11px;
     line-height: 1;
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    transition: background 0.14s ease, color 0.14s ease;
   }
 
   select,
   input {
-    padding: 6px 8px;
-    min-height: 30px;
+    padding: 6px 9px;
+    min-height: 32px;
     color: var(--text-mid);
+    width: 100%;
   }
 
   .icon-btn {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     display: grid;
     place-items: center;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
   }
 
   .subtle-btn {
-    padding: 6px 8px;
-    min-height: 30px;
+    padding: 6px 9px;
+    min-height: 32px;
     font-weight: 600;
     color: var(--text-mid);
-  }
-
-  .icon-btn-small {
-    width: 30px;
-    min-width: 30px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .subtle-btn.accent {
     color: #e9f2ff;
-    border-color: rgba(111, 171, 255, 0.4);
-    background: rgba(79, 136, 220, 0.3);
-  }
-
-  .tf-pill {
-    padding: 6px 8px;
-    min-height: 30px;
-    min-width: 38px;
-    font-weight: 600;
-    color: var(--text-mid);
-  }
-
-  .tf-pill.active {
-    color: #e9f2ff;
-    background: rgba(79, 136, 220, 0.24);
-    border-color: rgba(111, 171, 255, 0.4);
+    background: rgba(79, 136, 220, 0.52);
   }
 
   .icon-btn:hover,
   .subtle-btn:hover,
-  .tf-pill:hover,
+  .fold-trigger:hover,
   select:hover,
   input:hover {
-    border-color: rgba(130, 169, 211, 0.34);
-    background: rgba(54, 80, 109, 0.58);
+    background: rgba(57, 88, 121, 0.56);
   }
 
   .icon-btn:focus-visible,
   .subtle-btn:focus-visible,
-  .tf-pill:focus-visible,
+  .fold-trigger:focus-visible,
   select:focus-visible,
   input:focus-visible {
     outline: 2px solid rgba(76, 141, 255, 0.65);
@@ -360,11 +508,10 @@
 
   .progress-bar {
     width: 100%;
-    height: 4px;
+    height: 5px;
     background: #0f1721;
     border-radius: 999px;
     overflow: hidden;
-    border: 1px solid rgba(38, 49, 66, 0.65);
   }
 
   .progress-fill {
@@ -376,23 +523,22 @@
   .progress-text {
     display: flex;
     gap: 8px;
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-low);
-    white-space: nowrap;
-  }
-
-  .replay-controls::-webkit-scrollbar {
-    height: 4px;
-  }
-
-  .replay-controls::-webkit-scrollbar-thumb {
-    background: rgba(114, 136, 166, 0.42);
-    border-radius: 999px;
+    flex-wrap: wrap;
   }
 
   @media (max-width: 1199px) {
     .replay-controls {
       width: 100%;
+    }
+
+    .fold-content {
+      position: fixed;
+      left: 14px;
+      right: 14px;
+      width: auto;
+      max-width: none;
     }
 
     .progress-cluster {
@@ -402,12 +548,18 @@
   }
 
   @media (max-width: 767px) {
-    .range-cluster {
-      display: none;
+    .fold-group {
+      width: 100%;
     }
 
-    .session-cluster {
-      max-width: 220px;
+    .fold-trigger {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .progress-cluster {
+      margin-left: 0;
+      width: 100%;
     }
   }
 </style>

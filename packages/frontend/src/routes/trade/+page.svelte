@@ -24,6 +24,7 @@
     type ChartEntrySizingMode
   } from '$lib/engine/chart-entry';
   import {
+    getDrawingSnapshot,
     getDrawings,
     getSessionEvents,
     getSessionEntities,
@@ -35,6 +36,7 @@
     listSessions,
     saveAttachment,
     saveAnalyticsSnapshot,
+    saveDrawingSnapshot,
     saveDrawings,
     saveJournalEntry,
     saveSession,
@@ -44,9 +46,15 @@
     saveToolPrefs,
     saveWorkspacePrefs
   } from '$lib/db/ticks';
+  import {
+    legacyDrawingsToSnapshot,
+    resolveEngineToolFromAppTool,
+    snapshotToLegacyDrawings
+  } from '$lib/engine/tdraw-bridge';
   import type {
     BacktestSession,
     Bar,
+    DrawingEngineSnapshotV1,
     DrawingEntity,
     DrawingPoint,
     DrawingStyle,
@@ -55,6 +63,7 @@
     RiskToolDraft,
     SessionEvent,
     SessionSnapshot,
+    ToolDockSection,
     Timeframe,
     TradingPair,
     WorkspaceBottomTab,
@@ -64,6 +73,7 @@
   import AnalyticsPanel from '$lib/components/AnalyticsPanel.svelte';
   import AccountMetricsPanel from '$lib/components/AccountMetricsPanel.svelte';
   import Chart from '$lib/components/Chart.svelte';
+  import ChartTdraw from '$lib/components/ChartTdraw.svelte';
   import EventLogPanel from '$lib/components/EventLogPanel.svelte';
   import JournalPanel from '$lib/components/JournalPanel.svelte';
   import OrderPanel from '$lib/components/OrderPanel.svelte';
@@ -83,6 +93,9 @@
     D1: 86_400_000
   };
   const WATCHLIST_PAIRS: TradingPair[] = ['NAS100', 'US500', 'EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF'];
+  const USE_TDRAW_TOOLS =
+    import.meta.env.VITE_USE_TDRAW_TOOLS === '1' ||
+    import.meta.env.VITE_USE_TDRAW_TOOLS === 'true';
 
   let sessions: BacktestSession[] = [];
   $: currentPair = $tradingStore.currentPair;
@@ -116,6 +129,8 @@
   $: bottomDrawerOpen = $tradingStore.bottomDrawerOpen;
   $: bottomDrawerTab = $tradingStore.bottomDrawerTab;
   $: compactToolbar = $tradingStore.compactToolbar;
+  $: toolDockOpen = $tradingStore.toolDockOpen;
+  $: toolDockSection = $tradingStore.toolDockSection;
   $: selectedDrawing = selectedDrawingId
     ? drawings.find((drawing) => drawing.id === selectedDrawingId) ?? null
     : null;
@@ -126,6 +141,7 @@
   $: unrealizedPnL = equity - balance;
   $: replayProgressPct = totalBars > 0 ? (currentIndex / totalBars) * 100 : 0;
   $: activeTimestampLabel = currentBar ? new Date(currentBar.timestamp).toLocaleString() : '--';
+  $: openPanelCount = [watchlistVisible, rightDrawerOpen, bottomDrawerOpen, toolDockOpen].filter(Boolean).length;
 
   let worker: Worker | null = null;
   let isLoading = false;
@@ -135,6 +151,8 @@
   let lastAnalyticsTradeCount = -1;
   let latestLoadRequestId = 0;
   let drawingPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  let tdrawSnapshotSeed: DrawingEngineSnapshotV1 | null = null;
+  let latestTdrawSnapshot: DrawingEngineSnapshotV1 | null = null;
   let riskDraftSeed: DrawingPoint | null = null;
   let riskDraft: RiskToolDraft | null = null;
   let riskPanelError = '';
@@ -145,6 +163,7 @@
   let riskTakeProfit = '';
   let riskOverlayMetrics: RiskOverlayMetrics | null = null;
   let placeOrderOpen = false;
+  let layoutMenu: HTMLDetailsElement | null = null;
   let journalPrefill: {
     id: string;
     setupTags: string[];
@@ -290,6 +309,8 @@
     bottomDrawerOpen?: boolean;
     bottomDrawerTab?: WorkspaceBottomTab;
     compactToolbar?: boolean;
+    toolDockOpen?: boolean;
+    toolDockSection?: ToolDockSection;
   }) {
     tradingStore.setWatchlistVisible(prefs?.watchlistVisible ?? true);
     tradingStore.setRightDrawerOpen(prefs?.rightDrawerOpen ?? true);
@@ -297,6 +318,8 @@
     tradingStore.setBottomDrawerOpen(prefs?.bottomDrawerOpen ?? true);
     tradingStore.setBottomDrawerTab(prefs?.bottomDrawerTab ?? 'positions');
     tradingStore.setCompactToolbar(prefs?.compactToolbar ?? false);
+    tradingStore.setToolDockOpen(prefs?.toolDockOpen ?? true);
+    tradingStore.setToolDockSection(prefs?.toolDockSection ?? 'tools');
   }
 
   async function persistWorkspacePrefs(targetSessionId = sessionId) {
@@ -307,17 +330,33 @@
       rightDrawerTab,
       bottomDrawerOpen,
       bottomDrawerTab,
-      compactToolbar
+      compactToolbar,
+      toolDockOpen,
+      toolDockSection
     });
   }
 
   function toggleWatchlist() {
-    tradingStore.setWatchlistVisible(!watchlistVisible);
+    setWatchlistVisible(!watchlistVisible);
+  }
+
+  function setWatchlistVisible(open: boolean) {
+    tradingStore.setWatchlistVisible(open);
     void persistWorkspacePrefs();
   }
 
-  function toggleCompactToolbar() {
-    tradingStore.setCompactToolbar(!compactToolbar);
+  function toggleToolDock() {
+    setToolDockOpen(!toolDockOpen);
+  }
+
+  function setToolDockOpen(open: boolean) {
+    tradingStore.setToolDockOpen(open);
+    void persistWorkspacePrefs();
+  }
+
+  function setToolDockSection(section: ToolDockSection) {
+    tradingStore.setToolDockOpen(true);
+    tradingStore.setToolDockSection(section);
     void persistWorkspacePrefs();
   }
 
@@ -328,7 +367,11 @@
   }
 
   function toggleBottomDrawer() {
-    tradingStore.setBottomDrawerOpen(!bottomDrawerOpen);
+    setBottomDrawerOpen(!bottomDrawerOpen);
+  }
+
+  function setBottomDrawerOpen(open: boolean) {
+    tradingStore.setBottomDrawerOpen(open);
     void persistWorkspacePrefs();
   }
 
@@ -339,23 +382,168 @@
   }
 
   function toggleRightDrawer() {
-    tradingStore.setRightDrawerOpen(!rightDrawerOpen);
+    setRightDrawerOpen(!rightDrawerOpen);
+  }
+
+  function setRightDrawerOpen(open: boolean) {
+    tradingStore.setRightDrawerOpen(open);
     void persistWorkspacePrefs();
+  }
+
+  function closeLayoutMenu() {
+    if (layoutMenu?.open) {
+      layoutMenu.open = false;
+    }
+  }
+
+  function handleRightRailTabFromMenu(tab: WorkspaceRightTab) {
+    setRightDrawerTab(tab);
+    closeLayoutMenu();
+  }
+
+  function handleBottomTabFromMenu(tab: WorkspaceBottomTab) {
+    setBottomDrawerTab(tab);
+    closeLayoutMenu();
+  }
+
+  function runViewCommand(command: 'watchlist' | 'right_rail' | 'bottom_dock' | 'tool_dock' | 'focus_chart' | 'restore_workspace') {
+    if (command === 'watchlist') {
+      setWatchlistVisible(!watchlistVisible);
+      closeLayoutMenu();
+      return;
+    }
+    if (command === 'right_rail') {
+      setRightDrawerOpen(!rightDrawerOpen);
+      closeLayoutMenu();
+      return;
+    }
+    if (command === 'bottom_dock') {
+      setBottomDrawerOpen(!bottomDrawerOpen);
+      closeLayoutMenu();
+      return;
+    }
+    if (command === 'tool_dock') {
+      setToolDockOpen(!toolDockOpen);
+      closeLayoutMenu();
+      return;
+    }
+
+    const expanded = command === 'restore_workspace';
+    tradingStore.setWatchlistVisible(expanded);
+    tradingStore.setRightDrawerOpen(expanded);
+    tradingStore.setBottomDrawerOpen(expanded);
+    tradingStore.setToolDockOpen(expanded);
+    void persistWorkspacePrefs();
+    closeLayoutMenu();
+  }
+
+  function buildSnapshotFromLegacy(
+    sourceDrawings: DrawingEntity[],
+    targetSessionId: string,
+    targetPair: TradingPair
+  ): DrawingEngineSnapshotV1 {
+    return legacyDrawingsToSnapshot(sourceDrawings, {
+      bars: tradingStore.bars,
+      activeTool: resolveEngineToolFromAppTool(tradingStore.activeTool),
+      snapMode: tradingStore.magnetEnabled ? 'weak' : 'off',
+      meta: {
+        sessionId: targetSessionId,
+        pair: targetPair,
+        migratedFromLegacy: true
+      }
+    });
+  }
+
+  function drawingSyncToken(sourceDrawings: DrawingEntity[]): string {
+    return sourceDrawings
+      .map((drawing) =>
+        [
+          drawing.id,
+          drawing.tool,
+          drawing.points.length,
+          drawing.updatedAt,
+          drawing.hidden ? 1 : 0,
+          drawing.locked ? 1 : 0,
+          drawing.zIndex ?? 0
+        ].join(':')
+      )
+      .join('|');
+  }
+
+  function snapshotMatchesDrawings(
+    snapshot: DrawingEngineSnapshotV1,
+    sourceDrawings: DrawingEntity[],
+    targetSessionId: string,
+    targetPair: TradingPair
+  ): boolean {
+    const projected = snapshotToLegacyDrawings(snapshot, {
+      sessionId: targetSessionId,
+      pair: targetPair,
+      bars: tradingStore.bars
+    });
+    return drawingSyncToken(projected) === drawingSyncToken(sourceDrawings);
+  }
+
+  async function persistDrawingsForContext(
+    targetSessionId = sessionId,
+    targetPair = currentPair,
+    sourceDrawings = tradingStore.drawings
+  ) {
+    if (!targetSessionId) return;
+
+    const fallbackSnapshot = buildSnapshotFromLegacy(sourceDrawings, targetSessionId, targetPair);
+    const snapshot =
+      USE_TDRAW_TOOLS &&
+      latestTdrawSnapshot &&
+      snapshotMatchesDrawings(latestTdrawSnapshot, sourceDrawings, targetSessionId, targetPair)
+        ? latestTdrawSnapshot
+        : fallbackSnapshot;
+
+    tdrawSnapshotSeed = snapshot;
+
+    await Promise.all([
+      saveDrawings(targetSessionId, targetPair, sourceDrawings),
+      saveDrawingSnapshot(targetSessionId, targetPair, snapshot)
+    ]);
   }
 
   function queueDrawingPersist(targetSessionId = sessionId, targetPair = currentPair) {
     if (!targetSessionId) return;
     if (drawingPersistTimer) clearTimeout(drawingPersistTimer);
     drawingPersistTimer = setTimeout(() => {
-      void saveDrawings(targetSessionId, targetPair, tradingStore.drawings);
+      void persistDrawingsForContext(targetSessionId, targetPair, tradingStore.drawings);
       drawingPersistTimer = null;
     }, 160);
   }
 
   async function loadDrawingsForContext(targetSessionId: string, targetPair: TradingPair) {
-    const loaded = await getDrawings(targetSessionId, targetPair);
-    tradingStore.setDrawings(loaded);
+    const [snapshot, loaded] = await Promise.all([
+      getDrawingSnapshot(targetSessionId, targetPair),
+      getDrawings(targetSessionId, targetPair)
+    ]);
+
+    if (snapshot) {
+      const hydrated = snapshotToLegacyDrawings(snapshot, {
+        sessionId: targetSessionId,
+        pair: targetPair,
+        bars: tradingStore.bars
+      });
+      tradingStore.setDrawings(hydrated.length > 0 || loaded.length === 0 ? hydrated : loaded);
+      tdrawSnapshotSeed = snapshot;
+      latestTdrawSnapshot = snapshot;
+    } else {
+      tradingStore.setDrawings(loaded);
+      const bridged = buildSnapshotFromLegacy(loaded, targetSessionId, targetPair);
+      tdrawSnapshotSeed = bridged;
+      latestTdrawSnapshot = bridged;
+    }
+
     tradingStore.setSelectedDrawing(null);
+  }
+
+  function handleTdrawSnapshotChange(snapshot: DrawingEngineSnapshotV1) {
+    latestTdrawSnapshot = snapshot;
+    tdrawSnapshotSeed = snapshot;
   }
 
   function handleToolSelect(tool: DrawingToolType) {
@@ -885,7 +1073,7 @@
       trades
     });
     await saveSessionEvents(sessionId, sessionEvents);
-    await saveDrawings(sessionId, currentPair, drawings);
+    await persistDrawingsForContext(sessionId, currentPair, drawings);
     await persistToolPrefs(sessionId);
     await persistWorkspacePrefs(sessionId);
 
@@ -912,6 +1100,10 @@
     await persistCurrentSession();
 
     tradingStore.applySession(session);
+    tradingStore.setDrawings([]);
+    tradingStore.setSelectedDrawing(null);
+    tdrawSnapshotSeed = null;
+    latestTdrawSnapshot = null;
 
     const [snapshot, entities, events, journalEntries, prefs, workspacePrefs] = await Promise.all([
       getSnapshot(targetSessionId),
@@ -1196,8 +1388,12 @@
   async function handlePairChange(pair: TradingPair) {
     cancelRiskDraft();
     if (sessionId) {
-      await saveDrawings(sessionId, currentPair, drawings);
+      await persistDrawingsForContext(sessionId, currentPair, drawings);
     }
+    tradingStore.setDrawings([]);
+    tradingStore.setSelectedDrawing(null);
+    tdrawSnapshotSeed = null;
+    latestTdrawSnapshot = null;
     const nextSpread = PAIR_SPREADS[pair];
     tradingStore.setCurrentPair(pair);
     tradingStore.setExecutionConfig({ spread: nextSpread });
@@ -1401,33 +1597,11 @@
   <div class="header terminal-header">
     <div class="control-strip">
       <div class="brand-block">
-        <h1>Better Backtest</h1>
+        <h1 class="mono">{currentPair}</h1>
         <div class="brand-sub mono">
+          <span>{currentTimeframe}</span>
           <span>{sessionName}</span>
-          <span>{activeTimestampLabel}</span>
         </div>
-      </div>
-      <div class="workspace-actions mono">
-        <button class="quick-toggle icon-only" class:active={watchlistVisible} on:click={toggleWatchlist} title="Toggle watchlist (W)">
-          <span aria-hidden="true">≡</span>
-          <span class="sr-only">Watchlist</span>
-        </button>
-        <button class="quick-toggle icon-only" class:active={rightDrawerOpen} on:click={toggleRightDrawer} title="Toggle right panel (O)">
-          <span aria-hidden="true">◫</span>
-          <span class="sr-only">Right panel</span>
-        </button>
-        <button class="quick-toggle icon-only" class:active={bottomDrawerOpen} on:click={toggleBottomDrawer} title="Toggle bottom panel (B)">
-          <span aria-hidden="true">▤</span>
-          <span class="sr-only">Bottom panel</span>
-        </button>
-        <button class="quick-toggle icon-only" class:active={compactToolbar} on:click={toggleCompactToolbar} title="Toggle compact toolbar">
-          <span aria-hidden="true">▦</span>
-          <span class="sr-only">Compact mode</span>
-        </button>
-        <button class="quick-toggle accent" on:click={openPlaceOrderModal} title="Place order (P)">
-          <span aria-hidden="true">◎</span>
-          Place
-        </button>
       </div>
       <ReplayControls
         onPlayPause={handlePlayPause}
@@ -1442,8 +1616,62 @@
         onLoadSession={loadSession}
         {sessions}
         activeSessionId={sessionId}
-        dense={compactToolbar}
       />
+      <div class="workspace-menu mono">
+        <details class="layout-menu" bind:this={layoutMenu}>
+          <summary>
+            <span>View</span>
+            <strong>{openPanelCount}/4</strong>
+          </summary>
+          <div class="layout-sheet">
+            <section>
+              <h3>Panels</h3>
+              <div class="layout-actions">
+                <button class:active={watchlistVisible} on:click={() => runViewCommand('watchlist')}>
+                  {watchlistVisible ? 'Hide Watchlist' : 'Show Watchlist'}
+                </button>
+                <button class:active={rightDrawerOpen} on:click={() => runViewCommand('right_rail')}>
+                  {rightDrawerOpen ? 'Hide Right Rail' : 'Show Right Rail'}
+                </button>
+                <button class:active={bottomDrawerOpen} on:click={() => runViewCommand('bottom_dock')}>
+                  {bottomDrawerOpen ? 'Hide Bottom Dock' : 'Show Bottom Dock'}
+                </button>
+                <button class:active={toolDockOpen} on:click={() => runViewCommand('tool_dock')}>
+                  {toolDockOpen ? 'Hide Tool Dock' : 'Show Tool Dock'}
+                </button>
+              </div>
+            </section>
+            <section>
+              <h3>Right Rail</h3>
+              <div class="layout-actions">
+                {#each rightDrawerTabs as tab}
+                  <button class:active={rightDrawerTab === tab.id} on:click={() => handleRightRailTabFromMenu(tab.id)}>
+                    {tab.label}
+                  </button>
+                {/each}
+              </div>
+            </section>
+            <section>
+              <h3>Bottom Dock</h3>
+              <div class="layout-actions">
+                {#each dockTabs as tab}
+                  <button class:active={bottomDrawerTab === tab.id} on:click={() => handleBottomTabFromMenu(tab.id)}>
+                    {tab.label}
+                  </button>
+                {/each}
+              </div>
+            </section>
+            <section>
+              <h3>Presets</h3>
+              <div class="layout-actions">
+                <button on:click={() => runViewCommand('focus_chart')}>Focus Chart</button>
+                <button on:click={() => runViewCommand('restore_workspace')}>Restore Workspace</button>
+              </div>
+            </section>
+          </div>
+        </details>
+        <button class="place-order-btn" on:click={openPlaceOrderModal} title="Place order (P)">Place Order</button>
+      </div>
       <div class="header-metrics mono">
         <span>Balance ${balance.toFixed(2)}</span>
         <span class:positive={unrealizedPnL > 0} class:negative={unrealizedPnL < 0}>
@@ -1515,149 +1743,192 @@
           {/if}
           <div class="chart-host">
             <div class="chart-workspace">
-              <aside class="chart-toolbar">
-                {#each chartTools as tool}
-                  <button
-                    class="tool-btn mono"
-                    class:active={activeTool === tool.id}
-                    on:click={() => handleToolSelect(tool.id)}
-                    title={tool.label}
-                  >
-                    <span aria-hidden="true">{tool.icon}</span>
-                    <span class="sr-only">{tool.label}</span>
-                  </button>
-                {/each}
-                <button class="tool-btn mono" class:active={magnetEnabled} on:click={handleToggleMagnet} title="Magnet mode">
-                  <span aria-hidden="true">⌁</span>
-                  <span class="sr-only">Magnet</span>
-                </button>
-                <button class="tool-btn mono" class:active={drawingsVisible} on:click={handleToggleDrawingsVisible} title="Toggle drawings">
-                  <span aria-hidden="true">◉</span>
-                  <span class="sr-only">Show drawings</span>
-                </button>
-                <button
-                  class="tool-btn mono danger"
-                  on:click={() => {
-                    for (const drawing of drawings) {
-                      appendSessionEvent('drawing_deleted', { drawingId: drawing.id, tool: drawing.tool });
-                    }
-                    tradingStore.clearDrawings();
-                    queueDrawingPersist();
-                  }}
-                  disabled={drawings.length === 0}
-                  title="Clear drawings"
-                >
-                  <span aria-hidden="true">⌫</span>
-                  <span class="sr-only">Clear</span>
-                </button>
+              {#if toolDockOpen}
+                <aside class="chart-toolbar">
+                  <div class="dock-title mono">Chart Tools</div>
+                  <div class="dock-sections">
+                    <button class="dock-section mono" class:active={toolDockSection === 'tools'} on:click={() => setToolDockSection('tools')}>
+                      Tools
+                    </button>
+                    <button class="dock-section mono" class:active={toolDockSection === 'arrange'} on:click={() => setToolDockSection('arrange')}>
+                      Arrange
+                    </button>
+                    <button class="dock-section mono" class:active={toolDockSection === 'style'} on:click={() => setToolDockSection('style')}>
+                      Style
+                    </button>
+                  </div>
 
-                <div class="tool-divider"></div>
-                <button class="tool-btn mono" on:click={duplicateSelectedDrawing} disabled={!selectedDrawing} title="Duplicate selection">
-                  <span aria-hidden="true">⧉</span>
-                  <span class="sr-only">Duplicate</span>
-                </button>
-                <button class="tool-btn mono" on:click={toggleSelectedDrawingLock} disabled={!selectedDrawing} title={selectedDrawing?.locked ? 'Unlock' : 'Lock'}>
-                  <span aria-hidden="true">{selectedDrawing?.locked ? '⌧' : '⌂'}</span>
-                  <span class="sr-only">{selectedDrawing?.locked ? 'Unlock' : 'Lock'}</span>
-                </button>
-                <button class="tool-btn mono" on:click={toggleSelectedDrawingHidden} disabled={!selectedDrawing} title={selectedDrawing?.hidden ? 'Unhide' : 'Hide'}>
-                  <span aria-hidden="true">{selectedDrawing?.hidden ? '◉' : '○'}</span>
-                  <span class="sr-only">{selectedDrawing?.hidden ? 'Unhide' : 'Hide'}</span>
-                </button>
-                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('front')} disabled={!selectedDrawing} title="Bring to front">
-                  <span aria-hidden="true">↥</span>
-                  <span class="sr-only">Front</span>
-                </button>
-                <button class="tool-btn mono" on:click={() => moveSelectedDrawing('back')} disabled={!selectedDrawing} title="Send to back">
-                  <span aria-hidden="true">↧</span>
-                  <span class="sr-only">Back</span>
-                </button>
-
-                <div class="tool-divider"></div>
-                <label class="style-label">
-                  <span>Color</span>
-                  <input
-                    type="color"
-                    value={styleEditor.color}
-                    on:input={(event) => applyStyleChange({ color: (event.currentTarget as HTMLInputElement).value })}
-                  />
-                </label>
-                <label class="style-label">
-                  <span>Width</span>
-                  <select
-                    value={String(styleEditor.lineWidth)}
-                    on:change={(event) =>
-                      applyStyleChange({ lineWidth: Number((event.currentTarget as HTMLSelectElement).value) })}
-                  >
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                  </select>
-                </label>
-                <label class="style-label">
-                  <span>Line</span>
-                  <select
-                    value={styleEditor.lineStyle}
-                    on:change={(event) =>
-                      applyStyleChange({ lineStyle: (event.currentTarget as HTMLSelectElement).value as DrawingStyle['lineStyle'] })}
-                  >
-                    <option value="solid">Solid</option>
-                    <option value="dashed">Dashed</option>
-                    <option value="dotted">Dotted</option>
-                  </select>
-                </label>
-                <label class="style-label">
-                  <span>Fill</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="0.9"
-                    step="0.05"
-                    value={String(styleEditor.fillOpacity ?? 0.12)}
-                    on:input={(event) =>
-                      applyStyleChange({ fillOpacity: Number((event.currentTarget as HTMLInputElement).value) })}
-                  />
-                </label>
-                <label class="style-label">
-                  <span>Text</span>
-                  <input
-                    type="number"
-                    min="9"
-                    max="28"
-                    step="1"
-                    value={String(styleEditor.textSize ?? 12)}
-                    on:change={(event) =>
-                      applyStyleChange({ textSize: Number((event.currentTarget as HTMLInputElement).value) })}
-                  />
-                </label>
-              </aside>
+                  {#if toolDockSection === 'tools'}
+                    <div class="dock-grid">
+                      {#each chartTools as tool}
+                        <button
+                          class="tool-btn mono"
+                          class:active={activeTool === tool.id}
+                          on:click={() => handleToolSelect(tool.id)}
+                          title={tool.label}
+                        >
+                          <span aria-hidden="true">{tool.icon}</span>
+                          <span class="sr-only">{tool.label}</span>
+                        </button>
+                      {/each}
+                      <button class="tool-btn mono" class:active={magnetEnabled} on:click={handleToggleMagnet} title="Magnet mode">
+                        <span aria-hidden="true">⌁</span>
+                        <span class="sr-only">Magnet</span>
+                      </button>
+                      <button class="tool-btn mono" class:active={drawingsVisible} on:click={handleToggleDrawingsVisible} title="Toggle drawings">
+                        <span aria-hidden="true">◉</span>
+                        <span class="sr-only">Show drawings</span>
+                      </button>
+                    </div>
+                    <button
+                      class="tool-btn mono danger tool-clear"
+                      on:click={() => {
+                        for (const drawing of drawings) {
+                          appendSessionEvent('drawing_deleted', { drawingId: drawing.id, tool: drawing.tool });
+                        }
+                        tradingStore.clearDrawings();
+                        queueDrawingPersist();
+                      }}
+                      disabled={drawings.length === 0}
+                      title="Clear drawings"
+                    >
+                      Clear Drawings
+                    </button>
+                  {:else if toolDockSection === 'arrange'}
+                    <div class="dock-stack">
+                      <button class="tool-btn mono" on:click={duplicateSelectedDrawing} disabled={!selectedDrawing} title="Duplicate selection">
+                        Duplicate
+                      </button>
+                      <button class="tool-btn mono" on:click={toggleSelectedDrawingLock} disabled={!selectedDrawing} title={selectedDrawing?.locked ? 'Unlock' : 'Lock'}>
+                        {selectedDrawing?.locked ? 'Unlock' : 'Lock'}
+                      </button>
+                      <button class="tool-btn mono" on:click={toggleSelectedDrawingHidden} disabled={!selectedDrawing} title={selectedDrawing?.hidden ? 'Unhide' : 'Hide'}>
+                        {selectedDrawing?.hidden ? 'Unhide' : 'Hide'}
+                      </button>
+                      <button class="tool-btn mono" on:click={() => moveSelectedDrawing('front')} disabled={!selectedDrawing} title="Bring to front">
+                        Bring Front
+                      </button>
+                      <button class="tool-btn mono" on:click={() => moveSelectedDrawing('back')} disabled={!selectedDrawing} title="Send to back">
+                        Send Back
+                      </button>
+                    </div>
+                  {:else}
+                    <div class="dock-style-grid">
+                      <label class="style-label">
+                        <span>Color</span>
+                        <input
+                          type="color"
+                          value={styleEditor.color}
+                          on:input={(event) => applyStyleChange({ color: (event.currentTarget as HTMLInputElement).value })}
+                        />
+                      </label>
+                      <label class="style-label">
+                        <span>Width</span>
+                        <select
+                          value={String(styleEditor.lineWidth)}
+                          on:change={(event) =>
+                            applyStyleChange({ lineWidth: Number((event.currentTarget as HTMLSelectElement).value) })}
+                        >
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="4">4</option>
+                          <option value="5">5</option>
+                        </select>
+                      </label>
+                      <label class="style-label">
+                        <span>Line</span>
+                        <select
+                          value={styleEditor.lineStyle}
+                          on:change={(event) =>
+                            applyStyleChange({ lineStyle: (event.currentTarget as HTMLSelectElement).value as DrawingStyle['lineStyle'] })}
+                        >
+                          <option value="solid">Solid</option>
+                          <option value="dashed">Dashed</option>
+                          <option value="dotted">Dotted</option>
+                        </select>
+                      </label>
+                      <label class="style-label">
+                        <span>Fill</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="0.9"
+                          step="0.05"
+                          value={String(styleEditor.fillOpacity ?? 0.12)}
+                          on:input={(event) =>
+                            applyStyleChange({ fillOpacity: Number((event.currentTarget as HTMLInputElement).value) })}
+                        />
+                      </label>
+                      <label class="style-label">
+                        <span>Text</span>
+                        <input
+                          type="number"
+                          min="9"
+                          max="28"
+                          step="1"
+                          value={String(styleEditor.textSize ?? 12)}
+                          on:change={(event) =>
+                            applyStyleChange({ textSize: Number((event.currentTarget as HTMLInputElement).value) })}
+                        />
+                      </label>
+                    </div>
+                  {/if}
+                </aside>
+              {/if}
 
               {#key chartViewKey}
-                <Chart
-                  bars={bars}
-                  currentBar={currentBar}
-                  timeframe={currentTimeframe}
-                  pair={currentPair}
-                  {sessionId}
-                  drawings={drawings}
-                  activeTool={activeTool}
-                  selectedDrawingId={selectedDrawingId}
-                  magnetEnabled={magnetEnabled}
-                  drawingsVisible={drawingsVisible}
-                  positions={positions}
-                  {riskDraft}
-                  riskDraftSeed={riskDraftSeed}
-                  {riskOverlayMetrics}
-                  onCreateDrawing={handleCreateDrawing}
-                  onUpdateDrawing={handleUpdateDrawing}
-                  onDeleteDrawing={handleDeleteDrawing}
-                  onSelectDrawing={(drawingId) => tradingStore.setSelectedDrawing(drawingId)}
-                  onRiskDraftPoint={handleRiskDraftPoint}
-                  onRiskDraftAdjust={handleRiskDraftAdjust}
-                  onPositionLevelDrag={handlePositionLevelDrag}
-                />
+                {#if USE_TDRAW_TOOLS}
+                  <ChartTdraw
+                    bars={bars}
+                    currentBar={currentBar}
+                    timeframe={currentTimeframe}
+                    pair={currentPair}
+                    {sessionId}
+                    drawings={drawings}
+                    drawingSnapshot={tdrawSnapshotSeed}
+                    activeTool={activeTool}
+                    selectedDrawingId={selectedDrawingId}
+                    magnetEnabled={magnetEnabled}
+                    drawingsVisible={drawingsVisible}
+                    positions={positions}
+                    {riskDraft}
+                    riskDraftSeed={riskDraftSeed}
+                    {riskOverlayMetrics}
+                    onCreateDrawing={handleCreateDrawing}
+                    onUpdateDrawing={handleUpdateDrawing}
+                    onDeleteDrawing={handleDeleteDrawing}
+                    onSelectDrawing={(drawingId) => tradingStore.setSelectedDrawing(drawingId)}
+                    onSnapshotChange={handleTdrawSnapshotChange}
+                    onRiskDraftPoint={handleRiskDraftPoint}
+                    onRiskDraftAdjust={handleRiskDraftAdjust}
+                    onPositionLevelDrag={handlePositionLevelDrag}
+                  />
+                {:else}
+                  <Chart
+                    bars={bars}
+                    currentBar={currentBar}
+                    timeframe={currentTimeframe}
+                    pair={currentPair}
+                    {sessionId}
+                    drawings={drawings}
+                    activeTool={activeTool}
+                    selectedDrawingId={selectedDrawingId}
+                    magnetEnabled={magnetEnabled}
+                    drawingsVisible={drawingsVisible}
+                    positions={positions}
+                    {riskDraft}
+                    riskDraftSeed={riskDraftSeed}
+                    {riskOverlayMetrics}
+                    onCreateDrawing={handleCreateDrawing}
+                    onUpdateDrawing={handleUpdateDrawing}
+                    onDeleteDrawing={handleDeleteDrawing}
+                    onSelectDrawing={(drawingId) => tradingStore.setSelectedDrawing(drawingId)}
+                    onRiskDraftPoint={handleRiskDraftPoint}
+                    onRiskDraftAdjust={handleRiskDraftAdjust}
+                    onPositionLevelDrag={handlePositionLevelDrag}
+                  />
+                {/if}
               {/key}
             </div>
           </div>
@@ -1843,18 +2114,19 @@
 
 <style>
   .tradingview-shell {
-    grid-template-rows: 74px minmax(0, 1fr) 46px;
+    grid-template-rows: 72px minmax(0, 1fr) 44px;
     transition: grid-template-rows 0.2s ease;
   }
 
   .tradingview-shell.bottom-open {
-    grid-template-rows: 74px minmax(0, 1fr) 230px;
+    grid-template-rows: 72px minmax(0, 1fr) 220px;
   }
 
   .terminal-header {
-    padding: 0 8px;
-    border-bottom-color: rgba(98, 124, 158, 0.24);
-    background: linear-gradient(180deg, rgba(15, 24, 35, 0.98), rgba(11, 18, 28, 0.94));
+    padding: 0 10px;
+    border-bottom: 0;
+    background: rgba(7, 12, 19, 0.94);
+    box-shadow: inset 0 -1px 0 rgba(95, 126, 162, 0.18);
   }
 
   .control-strip {
@@ -1870,40 +2142,40 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 3px;
-    min-width: 170px;
+    gap: 2px;
+    min-width: 120px;
   }
 
   .brand-block h1 {
     margin: 0;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
-    letter-spacing: 0.3px;
-    color: #eaf0fb;
+    letter-spacing: 0.03em;
+    color: #f4f8ff;
   }
 
   .brand-sub {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     font-size: 10px;
-    color: #8ea2bc;
+    color: #7f98b6;
     min-width: 0;
   }
 
   .brand-sub span {
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: rgba(78, 112, 155, 0.15);
+    padding: 0;
+    border-radius: 0;
+    background: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .workspace-actions {
+  .workspace-menu {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
   }
 
   .sr-only {
@@ -1918,54 +2190,43 @@
     white-space: nowrap;
   }
 
-  .quick-toggle,
+  .panel-toggle,
+  .icon-inline,
+  .place-order-btn {
+    border: 0;
+    background: rgba(43, 64, 89, 0.32);
+    color: #b4c9e3;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 7px;
+    transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+  }
+
   .panel-toggle,
   .icon-inline {
-    border: 1px solid transparent;
-    background: rgba(35, 54, 76, 0.42);
-    color: #b2c4da;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 5px 8px;
-    border-radius: 8px;
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+    padding: 6px 10px;
   }
 
-  .quick-toggle:hover,
   .panel-toggle:hover,
-  .icon-inline:hover {
-    border-color: rgba(122, 162, 206, 0.3);
-    background: rgba(45, 69, 95, 0.62);
+  .icon-inline:hover,
+  .place-order-btn:hover {
+    background: rgba(62, 92, 126, 0.44);
   }
 
-  .quick-toggle.active {
-    color: #e6f0ff;
-    border-color: rgba(111, 171, 255, 0.38);
-    background: rgba(79, 136, 220, 0.28);
-  }
-
-  .quick-toggle.accent {
-    color: #eaf3ff;
-    border-color: rgba(111, 171, 255, 0.46);
-    background: linear-gradient(180deg, rgba(69, 130, 214, 0.62), rgba(54, 102, 171, 0.64));
-  }
-
-  .quick-toggle.icon-only {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    font-size: 12px;
+  .place-order-btn {
+    color: #ebf5ff;
+    background: rgba(70, 127, 201, 0.62);
+    white-space: nowrap;
   }
 
   .icon-inline {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     display: grid;
     place-items: center;
     padding: 0;
-    border-radius: 6px;
+    border-radius: 8px;
   }
 
   .control-strip :global(.replay-controls) {
@@ -1973,19 +2234,111 @@
     min-width: 0;
   }
 
+  .layout-menu {
+    position: relative;
+  }
+
+  .layout-menu > summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 7px;
+    background: rgba(37, 57, 80, 0.4);
+    color: #c0d4ec;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .layout-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .layout-menu > summary strong {
+    color: #f0f6ff;
+    font-weight: 700;
+  }
+
+  .layout-menu[open] > summary {
+    background: rgba(62, 102, 151, 0.54);
+  }
+
+  .layout-sheet {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    width: 312px;
+    border-radius: 10px;
+    background: rgba(8, 14, 22, 0.98);
+    box-shadow: 0 14px 30px rgba(2, 7, 13, 0.62);
+    border: 1px solid rgba(86, 120, 157, 0.36);
+    padding: 8px 10px;
+    display: grid;
+    gap: 0;
+    z-index: 40;
+  }
+
+  .layout-sheet section {
+    display: grid;
+    gap: 7px;
+    padding: 8px 0;
+    border-top: 1px solid rgba(92, 124, 160, 0.22);
+  }
+
+  .layout-sheet section:first-child {
+    border-top: 0;
+    padding-top: 2px;
+  }
+
+  .layout-sheet h3 {
+    margin: 0;
+    font-size: 10px;
+    letter-spacing: 0.48px;
+    text-transform: uppercase;
+    color: #8ea8c6;
+  }
+
+  .layout-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .layout-actions button {
+    border: 0;
+    border-radius: 7px;
+    background: rgba(38, 56, 78, 0.44);
+    color: #acc4e0;
+    padding: 6px 9px;
+    font-size: 10px;
+    font-weight: 600;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+
+  .layout-actions button:hover {
+    background: rgba(60, 93, 130, 0.44);
+  }
+
+  .layout-actions button.active {
+    color: #eff5ff;
+    background: rgba(79, 136, 220, 0.52);
+  }
+
   .header-metrics {
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 10px;
+    gap: 6px;
+    font-size: 11px;
     white-space: nowrap;
-    color: #8fa5c2;
+    color: #9ab0cc;
   }
 
   .header-metrics span {
-    padding: 4px 7px;
+    padding: 3px 8px;
     border-radius: 999px;
-    background: rgba(75, 101, 130, 0.2);
+    background: rgba(38, 56, 78, 0.24);
   }
 
   .header-metrics .positive {
@@ -1997,101 +2350,108 @@
   }
 
   .workspace-grid {
-    --watch-col: 0px;
-    --right-col: 0px;
-    display: grid;
-    grid-template-columns: var(--watch-col) minmax(0, 1fr) var(--right-col);
-    gap: 8px;
+    position: relative;
+    display: block;
     padding: 8px;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
   }
 
-  .workspace-grid.with-watchlist {
-    --watch-col: 220px;
-  }
-
-  .workspace-grid.with-right-drawer {
-    --right-col: 350px;
-  }
-
   .watchlist-panel,
   .chart-area,
   .right-rail {
-    border: 1px solid rgba(101, 127, 160, 0.08);
-    background: linear-gradient(180deg, rgba(16, 24, 35, 0.92), rgba(12, 18, 28, 0.94));
-    border-radius: 12px;
-    box-shadow: 0 12px 28px rgba(4, 11, 18, 0.42);
+    background: rgba(8, 14, 22, 0.9);
+    border-radius: 10px;
+    border: 1px solid rgba(88, 118, 152, 0.22);
+    box-shadow: 0 8px 22px rgba(3, 8, 14, 0.38);
     min-height: 0;
     min-width: 0;
     overflow: hidden;
   }
 
+  .workspace-grid.with-watchlist .watchlist-panel,
+  .workspace-grid.with-right-drawer .right-rail {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
   .watchlist-panel {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    bottom: 8px;
+    width: min(264px, calc(100% - 16px));
+    z-index: 24;
     display: flex;
     flex-direction: column;
+    opacity: 0;
+    transform: translateX(-8px);
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
   }
 
   .watchlist-head {
-    padding: 8px 10px;
+    padding: 10px 11px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 10px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #8fa5c2;
-    border-bottom: 1px solid rgba(101, 127, 160, 0.12);
+    letter-spacing: 0.08em;
+    color: #9eb2cd;
+    border-bottom: 1px solid rgba(87, 119, 154, 0.2);
   }
 
   .watchlist-body {
-    overflow-y: auto;
-    padding: 6px;
+    overflow: hidden;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
   .watch-item {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
     text-align: left;
-    padding: 7px 8px;
-    border-radius: 9px;
+    padding: 8px 9px;
+    border-radius: 8px;
     border: 1px solid transparent;
-    background: rgba(46, 69, 94, 0.14);
-    color: #97acc7;
-    font-size: 10px;
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    background: transparent;
+    color: #a7bdd9;
+    font-size: 12px;
+    transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
   }
 
   .watch-item:hover {
-    background: rgba(56, 83, 113, 0.26);
-    border-color: rgba(113, 149, 191, 0.22);
+    background: rgba(45, 67, 92, 0.38);
   }
 
   .watch-item.active {
-    color: #e2efff;
-    background: rgba(88, 145, 229, 0.28);
-    border-color: rgba(114, 167, 247, 0.3);
+    color: #edf4ff;
+    background: rgba(73, 123, 194, 0.34);
+    border-color: rgba(100, 151, 224, 0.46);
+    transform: none;
   }
 
   .watch-symbol {
-    font-weight: 700;
-    letter-spacing: 0.2px;
-    color: #dce9fa;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #f0f6ff;
   }
 
   .watch-spread {
-    color: #80c6a5;
+    color: #8fd7b3;
   }
 
   .chart-area {
     display: flex;
     flex-direction: column;
+    height: 100%;
   }
 
   .chart-shell {
@@ -2108,24 +2468,24 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
-    border-bottom: 1px solid rgba(101, 127, 160, 0.1);
-    background: rgba(19, 31, 46, 0.58);
+    padding: 10px 12px;
+    background: rgba(9, 16, 25, 0.62);
+    border-bottom: 1px solid rgba(89, 123, 159, 0.22);
   }
 
   .instrument-line {
     display: flex;
     gap: 8px;
     align-items: center;
-    color: #a7bad2;
-    font-size: 10px;
+    color: #abc0da;
+    font-size: 11px;
     min-width: 0;
     flex-wrap: wrap;
   }
 
   .instrument-line strong {
-    color: #e6f0ff;
-    font-size: 11px;
+    color: #f0f6ff;
+    font-size: 12px;
   }
 
   .ohlc-line {
@@ -2140,9 +2500,9 @@
 
   .ok-pill,
   .warning-pill {
-    padding: 4px 8px;
+    padding: 5px 9px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
   }
 
@@ -2209,47 +2569,102 @@
 
   .chart-workspace {
     height: 100%;
-    display: grid;
-    grid-template-columns: 56px minmax(0, 1fr);
+    display: block;
+    position: relative;
     min-height: 0;
   }
 
   .chart-toolbar {
-    border-right: 1px solid rgba(101, 127, 160, 0.1);
-    background: rgba(16, 26, 39, 0.84);
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    z-index: 22;
+    width: 222px;
+    background: rgba(8, 14, 22, 0.78);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1px solid rgba(88, 118, 152, 0.3);
+    box-shadow: 0 8px 20px rgba(3, 9, 16, 0.42);
+    overflow: hidden;
+  }
+
+  .dock-title {
+    font-size: 10px;
+    color: #95acc7;
+    text-transform: uppercase;
+    letter-spacing: 0.48px;
+    padding: 0 2px;
+  }
+
+  .dock-sections {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .dock-section {
+    border: 0;
+    border-radius: 8px;
+    background: rgba(44, 66, 90, 0.42);
+    color: #adc2dd;
+    padding: 7px 8px;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+  }
+
+  .dock-section.active {
+    color: #ecf3ff;
+    background: rgba(76, 133, 213, 0.42);
+  }
+
+  .dock-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .dock-stack {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 8px 6px;
-    overflow-y: auto;
+  }
+
+  .dock-style-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .tool-clear {
+    width: 100%;
   }
 
   .tool-btn {
-    border: 1px solid transparent;
-    background: rgba(41, 62, 84, 0.28);
-    color: #a9bdd6;
-    font-size: 12px;
-    padding: 6px 4px;
+    border: 0;
+    background: rgba(41, 62, 84, 0.4);
+    color: #b4c9e4;
+    font-size: 11px;
+    padding: 8px 6px;
     border-radius: 8px;
-    text-transform: uppercase;
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+    transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
   }
 
   .tool-btn:hover {
-    border-color: rgba(109, 154, 209, 0.28);
-    background: rgba(56, 83, 112, 0.44);
+    background: rgba(55, 83, 113, 0.52);
   }
 
   .tool-btn.active {
-    color: #e6f0ff;
-    border-color: rgba(105, 165, 242, 0.34);
-    background: rgba(78, 136, 217, 0.33);
+    color: #f0f6ff;
+    background: rgba(78, 136, 217, 0.48);
   }
 
   .tool-btn.danger {
     color: #ffd5db;
-    background: rgba(150, 48, 64, 0.35);
-    border-color: rgba(219, 101, 122, 0.3);
+    background: rgba(150, 48, 64, 0.45);
   }
 
   .tool-btn:disabled {
@@ -2257,16 +2672,10 @@
     cursor: not-allowed;
   }
 
-  .tool-divider {
-    height: 1px;
-    background: rgba(101, 127, 160, 0.14);
-    margin: 4px 0;
-  }
-
   .style-label {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
     font-size: 9px;
     color: #7d93af;
     text-transform: uppercase;
@@ -2276,12 +2685,12 @@
   .style-label input,
   .style-label select {
     width: 100%;
-    border: 1px solid rgba(105, 133, 164, 0.25);
-    background: rgba(28, 43, 61, 0.66);
+    border: 0;
+    background: rgba(28, 43, 61, 0.78);
     color: #d7e6fb;
     font-size: 10px;
-    padding: 5px 6px;
-    border-radius: 6px;
+    padding: 6px 7px;
+    border-radius: 8px;
   }
 
   .chart-footer {
@@ -2290,69 +2699,79 @@
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 6px 10px;
-    border-top: 1px solid rgba(101, 127, 160, 0.12);
+    padding: 6px 10px 7px;
     color: #7e95b0;
     font-size: 10px;
-    background: rgba(14, 24, 36, 0.82);
+    background: rgba(9, 16, 25, 0.56);
+    border-top: 1px solid rgba(90, 123, 160, 0.2);
   }
 
   .warning-banner {
-    margin: 7px 10px 0;
-    padding: 7px 10px;
+    margin: 9px 12px 0;
+    padding: 8px 11px;
     border-radius: 7px;
     color: #ffd797;
-    background: rgba(219, 153, 52, 0.2);
+    background: rgba(219, 153, 52, 0.26);
     font-size: 11px;
   }
 
   .right-rail {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    bottom: 8px;
+    width: min(348px, calc(100% - 16px));
+    z-index: 25;
     display: flex;
     flex-direction: column;
+    opacity: 0;
+    transform: translateX(8px);
+    pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s ease;
   }
 
   .rail-head {
-    padding: 8px 9px;
-    border-bottom: 1px solid rgba(101, 127, 160, 0.12);
+    padding: 10px 10px 8px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    border-bottom: 1px solid rgba(90, 122, 157, 0.2);
   }
 
   .rail-tabs {
     display: flex;
-    gap: 4px;
+    gap: 6px;
   }
 
   .rail-tab {
-    padding: 6px 9px;
-    border-radius: 6px;
-    font-size: 10px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    font-size: 11px;
     font-weight: 600;
-    color: #99b0cb;
-    background: rgba(53, 76, 102, 0.24);
-    border: 1px solid transparent;
+    color: #a6bcd8;
+    background: rgba(51, 74, 100, 0.36);
+    border: 0;
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    transition: background 0.14s ease, color 0.14s ease;
   }
 
   .rail-tab:hover {
-    border-color: rgba(113, 169, 245, 0.18);
-    background: rgba(82, 139, 219, 0.2);
+    background: rgba(72, 123, 194, 0.34);
   }
 
   .rail-tab.active {
-    color: #e6f0ff;
-    background: rgba(82, 139, 219, 0.28);
-    border-color: rgba(113, 169, 245, 0.35);
+    color: #ecf3ff;
+    background: rgba(82, 139, 219, 0.46);
   }
 
   .rail-pane {
     min-height: 0;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 8px 8px;
   }
 
   .rail-order-head {
@@ -2368,13 +2787,12 @@
   }
 
   .risk-pane {
-    padding: 10px;
+    padding-top: 10px;
   }
 
   .risk-hint {
     border-radius: 9px;
-    background: rgba(34, 52, 74, 0.22);
-    border: 1px solid rgba(103, 131, 166, 0.12);
+    background: rgba(26, 42, 60, 0.32);
     padding: 10px;
     display: flex;
     flex-direction: column;
@@ -2394,8 +2812,7 @@
 
   .risk-panel {
     border-radius: 9px;
-    border: 1px solid rgba(110, 166, 240, 0.22);
-    background: rgba(17, 29, 43, 0.8);
+    background: rgba(13, 23, 35, 0.76);
     padding: 9px;
     display: flex;
     flex-direction: column;
@@ -2426,10 +2843,10 @@
 
   .risk-panel-grid input,
   .risk-panel-grid select {
-    border: 1px solid rgba(105, 133, 164, 0.25);
+    border: 0;
     background: rgba(26, 42, 60, 0.72);
     color: #d7e6fb;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 6px;
     font-size: 11px;
   }
@@ -2444,8 +2861,7 @@
 
   .risk-summary span {
     border-radius: 999px;
-    background: rgba(58, 83, 113, 0.32);
-    border: 1px solid rgba(103, 131, 166, 0.16);
+    background: rgba(58, 83, 113, 0.4);
     padding: 4px 8px;
   }
 
@@ -2468,11 +2884,11 @@
   }
 
   .bottom-panel {
-    padding: 0 6px 6px;
+    padding: 0 10px 10px;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
   .bottom-panel.collapsed {
@@ -2482,8 +2898,8 @@
   .dock-tabs {
     display: flex;
     align-items: center;
-    gap: 4px;
-    overflow-x: auto;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   .dock-tab {
@@ -2491,19 +2907,18 @@
     align-items: center;
     gap: 6px;
     border-radius: 7px;
-    border: 1px solid transparent;
-    background: rgba(30, 44, 62, 0.44);
-    color: #9cb2ce;
+    border: 0;
+    background: rgba(37, 56, 78, 0.34);
+    color: #a7bdd9;
     padding: 6px 10px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
   }
 
   .dock-tab.active {
-    color: #e6f0ff;
-    border-color: rgba(110, 168, 245, 0.28);
-    background: rgba(78, 136, 217, 0.3);
+    color: #eff5ff;
+    background: rgba(73, 122, 193, 0.44);
   }
 
   .dock-collapse {
@@ -2518,9 +2933,9 @@
   .dock-body {
     min-height: 0;
     flex: 1;
-    border-radius: 11px;
-    border: 1px solid rgba(101, 127, 160, 0.14);
-    background: linear-gradient(180deg, rgba(15, 23, 35, 0.98), rgba(12, 19, 30, 0.96));
+    border-radius: 10px;
+    background: rgba(8, 14, 22, 0.9);
+    border: 1px solid rgba(87, 119, 154, 0.2);
     overflow: hidden;
     position: relative;
   }
@@ -2541,6 +2956,14 @@
   @media (max-width: 1399px) {
     .header-metrics {
       display: none;
+    }
+
+    .layout-sheet {
+      right: -24px;
+    }
+
+    .chart-toolbar {
+      width: 220px;
     }
   }
 
@@ -2564,23 +2987,20 @@
       min-width: 130px;
     }
 
-    .workspace-actions {
-      order: 3;
-      width: 100%;
-      justify-content: flex-start;
-    }
-
-    .workspace-grid {
-      grid-template-columns: minmax(0, 1fr);
-      grid-auto-rows: minmax(120px, auto);
-    }
-
     .watchlist-panel {
-      max-height: 170px;
+      width: 240px;
     }
 
     .right-rail {
-      max-height: 38vh;
+      width: 328px;
+    }
+
+    .chart-toolbar {
+      width: 208px;
+    }
+
+    .dock-style-grid {
+      grid-template-columns: 1fr;
     }
   }
 
@@ -2593,40 +3013,47 @@
       grid-template-rows: 126px minmax(0, 1fr) 220px;
     }
 
-    .workspace-actions {
-      overflow-x: auto;
-      padding-bottom: 2px;
+    .workspace-menu {
+      width: 100%;
+      order: 4;
+      justify-content: space-between;
     }
 
-    .chart-workspace {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
+    .layout-sheet {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      width: auto;
+    }
+
+    .workspace-grid {
+      padding: 8px;
+    }
+
+    .watchlist-panel,
+    .right-rail {
+      left: 8px;
+      right: 8px;
+      width: auto;
+      top: 8px;
+      bottom: 8px;
+      transform: translateY(-8px);
+    }
+
+    .workspace-grid.with-watchlist .watchlist-panel,
+    .workspace-grid.with-right-drawer .right-rail {
+      transform: translateY(0);
     }
 
     .chart-toolbar {
-      border-right: 0;
-      border-bottom: 1px solid rgba(101, 127, 160, 0.2);
-      flex-direction: row;
-      overflow-x: auto;
-      overflow-y: hidden;
+      left: 8px;
+      top: 8px;
+      width: min(320px, calc(100% - 16px));
       padding: 6px;
     }
 
-    .tool-btn {
-      min-width: 44px;
-      flex: 0 0 auto;
-    }
-
-    .tool-divider {
-      width: 1px;
-      min-height: 32px;
-      height: auto;
-      margin: 0 4px;
-    }
-
-    .style-label {
-      min-width: 92px;
-      flex: 0 0 auto;
+    .dock-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
     .risk-panel-grid {

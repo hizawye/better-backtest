@@ -118,16 +118,15 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    background: #0f161f;
+    background: transparent;
   }
 
   .header {
     padding: 10px 12px;
-    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #101824;
+    background: rgba(20, 31, 46, 0.58);
   }
 
   .header h3 {
@@ -144,18 +143,19 @@
   }
 
   .actions button {
-    font-size: 10px;
-    padding: 5px 8px 6px;
-    background: #1b2736;
+    font-size: 11px;
+    padding: 6px 9px 7px;
+    background: rgba(43, 65, 91, 0.42);
     color: var(--text-mid);
-    border: 1px solid rgba(71, 85, 105, 0.55);
+    border: 0;
+    border-radius: 8px;
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
 
   .actions button:hover {
     color: var(--text-hi);
-    border-color: rgba(114, 136, 166, 0.75);
+    background: rgba(57, 87, 120, 0.5);
   }
 
   .content {
@@ -176,7 +176,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    border-top: 1px solid rgba(51, 65, 85, 0.45);
+    border-top: 1px solid rgba(81, 111, 147, 0.22);
     padding-top: 8px;
   }
 
@@ -189,8 +189,9 @@
   }
 
   .stats-table {
-    border-top: 1px solid rgba(51, 65, 85, 0.4);
-    border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+    background: rgba(17, 27, 40, 0.58);
+    border-radius: 10px;
+    padding: 3px 8px;
   }
 
   .stat-row {
@@ -199,7 +200,7 @@
     justify-content: space-between;
     gap: 10px;
     padding: 6px 0;
-    border-top: 1px solid rgba(51, 65, 85, 0.35);
+    border-top: 1px solid rgba(74, 101, 133, 0.24);
     font-size: 11px;
   }
 
@@ -222,14 +223,14 @@
   svg {
     width: 100%;
     height: 80px;
-    background: #0f1721;
-    border: 1px solid rgba(38, 49, 66, 0.65);
+    background: rgba(14, 23, 34, 0.72);
+    border-radius: 10px;
   }
 
   .histogram,
   .setups {
-    border-top: 1px solid rgba(51, 65, 85, 0.4);
-    border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+    background: rgba(17, 27, 40, 0.58);
+    border-radius: 10px;
     padding: 4px 0;
   }
 
@@ -241,7 +242,7 @@
     font-size: 10px;
     color: var(--text-mid);
     padding: 4px 0;
-    border-top: 1px solid rgba(51, 65, 85, 0.3);
+    border-top: 1px solid rgba(74, 101, 133, 0.22);
   }
 
   .bar-row {
@@ -261,7 +262,7 @@
     height: 6px;
     background: #0f1721;
     overflow: hidden;
-    border: 1px solid rgba(38, 49, 66, 0.65);
+    border-radius: 999px;
   }
 
   .bar {
@@ -349,23 +350,6 @@
 
   .section .stats-table .stat-row:first-child {
     padding-top: 4px;
-  }
-
-  .content::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .content::-webkit-scrollbar-thumb {
-    background: rgba(71, 85, 105, 0.6);
-  }
-
-  .content::-webkit-scrollbar-track {
-    background: #0f161f;
-  }
-
-  .content {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(71, 85, 105, 0.6) #0f161f;
   }
 
   .header h3 {

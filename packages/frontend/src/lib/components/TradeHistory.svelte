@@ -70,25 +70,25 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    background: #0f161f;
+    background: var(--surface-0);
+    border-radius: var(--radius-md);
   }
 
   .table-header {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border-subtle);
+    padding: 12px 14px 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
-    background: #121b27;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
   .table-header h3 {
     margin: 0;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     color: var(--text-hi);
-    letter-spacing: 0.45px;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
   }
 
@@ -101,10 +101,9 @@
   .stat {
     font-size: 10px;
     color: var(--text-low);
-    border: 1px solid rgba(71, 85, 105, 0.5);
-    background: #111923;
+    background: rgba(56, 87, 122, 0.34);
     border-radius: 999px;
-    padding: 4px 9px;
+    padding: 4px 10px;
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
@@ -112,13 +111,14 @@
   .stat strong {
     color: var(--text-hi);
     margin-left: 4px;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   .table-wrapper {
     flex: 1;
     overflow: auto;
     min-height: 0;
+    padding: 0 10px 10px;
   }
 
   .empty-state {
@@ -130,13 +130,14 @@
 
   table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0 6px;
   }
 
   thead {
     position: sticky;
     top: 0;
-    background: #111923;
+    background: linear-gradient(180deg, rgba(12, 20, 31, 0.95), rgba(12, 20, 31, 0.82));
     z-index: 1;
   }
 
@@ -144,43 +145,54 @@
     padding: 8px 10px;
     text-align: left;
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-low);
     text-transform: uppercase;
     letter-spacing: 0.45px;
-    border-bottom: 1px solid var(--border-subtle);
+    border: none;
   }
 
   td {
     padding: 8px 10px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-hi);
-    border-bottom: 1px solid rgba(38, 49, 66, 0.62);
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    border: none;
+    background: var(--surface-1);
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   tbody tr:hover {
-    background: rgba(76, 141, 255, 0.06);
+    filter: brightness(1.06);
+  }
+
+  th:first-child,
+  td:first-child {
+    border-top-left-radius: 10px;
+    border-bottom-left-radius: 10px;
+  }
+
+  th:last-child,
+  td:last-child {
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
   }
 
   .side {
-    padding: 2px 8px;
+    padding: 3px 8px;
     border-radius: 999px;
     font-size: 10px;
-    font-weight: 600;
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 700;
+    font-family: inherit;
   }
 
   .side.buy {
     background: rgba(20, 184, 122, 0.14);
     color: var(--bull);
-    border: 1px solid rgba(20, 184, 122, 0.35);
   }
 
   .side.sell {
     background: rgba(240, 91, 110, 0.14);
     color: var(--bear);
-    border: 1px solid rgba(240, 91, 110, 0.35);
   }
 
   .positive {

@@ -21,8 +21,11 @@
     "vite": "^5.0.0"
   },
   "dependencies": {
+    "@tdraw-tools/core": "file:../../../tdraw-tools/packages/core",
+    "@tdraw-tools/lightweight-adapter": "file:../../../tdraw-tools/packages/lightweight-adapter",
+    "@tdraw-tools/risk": "file:../../../tdraw-tools/packages/risk",
+    "dexie": "^4.0.0",
     "lightweight-charts": "^4.1.0",
-    "zustand": "^4.5.0",
-    "dexie": "^4.0.0"
+    "zustand": "^4.5.0"
   }
 }

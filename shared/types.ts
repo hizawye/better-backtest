@@ -118,6 +118,50 @@ export interface DrawingEntity {
   updatedAt: number;
 }
 
+export type DrawingEngineLineStyle = 'solid' | 'dashed' | 'dotted';
+export type DrawingEngineSnapMode = 'off' | 'weak' | 'strong';
+
+export interface DrawingEnginePoint {
+  logical: number;
+  price: number;
+}
+
+export interface DrawingEngineStyle {
+  strokeColor: string;
+  fillColor: string;
+  textColor: string;
+  lineWidth: number;
+  lineStyle: DrawingEngineLineStyle;
+  opacity: number;
+  showLabel: boolean;
+}
+
+export interface DrawingEngineEntity {
+  id: string;
+  tool: string;
+  points: DrawingEnginePoint[];
+  style: DrawingEngineStyle;
+  text?: string;
+  visible: boolean;
+  locked: boolean;
+  groupId?: string;
+  zIndex: number;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DrawingEngineSnapshotV1 {
+  version: '1';
+  drawings: DrawingEngineEntity[];
+  groups: Array<{ id: string; name?: string }>;
+  prefs: {
+    activeTool: string;
+    snapMode: DrawingEngineSnapMode;
+  };
+  meta?: Record<string, unknown>;
+}
+
 export interface ChartToolState {
   activeTool: DrawingToolType;
   selectedDrawingId: string | null;
@@ -125,6 +169,7 @@ export interface ChartToolState {
   drawingsVisible: boolean;
 }
 
+export type ToolDockSection = 'tools' | 'style' | 'arrange';
 export type WorkspaceRightTab = 'order' | 'risk' | 'account';
 export type WorkspaceBottomTab = 'positions' | 'trades' | 'events' | 'journal' | 'analytics';
 
@@ -135,6 +180,8 @@ export interface WorkspacePrefs {
   bottomDrawerOpen: boolean;
   bottomDrawerTab: WorkspaceBottomTab;
   compactToolbar: boolean;
+  toolDockOpen: boolean;
+  toolDockSection: ToolDockSection;
 }
 
 export interface RiskToolDraft {

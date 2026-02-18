@@ -182,24 +182,24 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    background: #0f161f;
+    background: var(--surface-0);
+    border-radius: var(--radius-md);
   }
 
   .table-header {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border-subtle);
+    padding: 12px 14px 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #121b27;
+    gap: 10px;
   }
 
   .table-header h3 {
     margin: 0;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     color: var(--text-hi);
-    letter-spacing: 0.45px;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
   }
 
@@ -211,28 +211,29 @@
 
   .header-actions input {
     width: 68px;
-    padding: 5px 6px;
-    background: #111923;
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
+    padding: 6px 8px;
+    background: rgba(20, 31, 45, 0.92);
+    border: none;
+    box-shadow: inset 0 0 0 1px var(--line-soft);
+    border-radius: 8px;
     color: var(--text-hi);
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .btn-small {
-    padding: 6px 9px;
-    border-radius: 6px;
-    background: #1b2736;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(67, 107, 149, 0.34);
     color: var(--text-hi);
-    border: 1px solid var(--border-subtle);
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.45px;
+    transition: filter var(--motion-fast);
   }
 
   .btn-small:hover:not(:disabled) {
-    border-color: rgba(114, 136, 166, 0.75);
+    filter: brightness(1.08);
   }
 
   .btn-small:disabled {
@@ -244,6 +245,7 @@
     flex: 1;
     overflow: auto;
     min-height: 0;
+    padding: 0 10px 10px;
   }
 
   .empty-state {
@@ -255,13 +257,14 @@
 
   table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0 6px;
   }
 
   thead {
     position: sticky;
     top: 0;
-    background: #111923;
+    background: linear-gradient(180deg, rgba(12, 20, 31, 0.95), rgba(12, 20, 31, 0.82));
     z-index: 1;
   }
 
@@ -269,43 +272,58 @@
     padding: 8px 10px;
     text-align: left;
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-low);
     text-transform: uppercase;
     letter-spacing: 0.45px;
-    border-bottom: 1px solid var(--border-subtle);
+    border: none;
   }
 
   td {
     padding: 8px 10px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-hi);
-    border-bottom: 1px solid rgba(38, 49, 66, 0.62);
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    border: none;
+    background: var(--surface-1);
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   tbody tr:hover {
-    background: rgba(76, 141, 255, 0.06);
+    filter: brightness(1.06);
+  }
+
+  th:first-child,
+  td:first-child {
+    border-top-left-radius: 10px;
+    border-bottom-left-radius: 10px;
+  }
+
+  th:last-child,
+  td:last-child {
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
+  }
+
+  td:last-child {
+    white-space: nowrap;
   }
 
   .side {
-    padding: 2px 8px;
+    padding: 3px 8px;
     border-radius: 999px;
     font-size: 10px;
-    font-weight: 600;
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 700;
+    font-family: inherit;
   }
 
   .side.buy {
     background: rgba(20, 184, 122, 0.14);
     color: var(--bull);
-    border: 1px solid rgba(20, 184, 122, 0.35);
   }
 
   .side.sell {
     background: rgba(240, 91, 110, 0.14);
     color: var(--bear);
-    border: 1px solid rgba(240, 91, 110, 0.35);
   }
 
   .positive {
@@ -322,28 +340,26 @@
     color: var(--text-low);
     font-size: 12px;
     border-radius: 5px;
-    transition: all 0.15s;
-    border: 1px solid transparent;
+    transition: background var(--motion-fast), color var(--motion-fast);
   }
 
   .btn-close:hover {
     background: rgba(240, 91, 110, 0.15);
     color: var(--bear);
-    border-color: rgba(240, 91, 110, 0.4);
   }
 
   .btn-mini {
     margin-right: 6px;
-    padding: 4px 7px;
-    background: #1b2736;
+    padding: 4px 8px;
+    background: rgba(66, 101, 141, 0.3);
     color: var(--text-mid);
-    border-radius: 6px;
+    border-radius: 999px;
     font-size: 10px;
-    border: 1px solid rgba(71, 85, 105, 0.55);
+    font-weight: 600;
   }
 
   .btn-mini:hover {
     color: var(--text-hi);
-    border-color: rgba(114, 136, 166, 0.75);
+    background: rgba(81, 126, 175, 0.46);
   }
 </style>
