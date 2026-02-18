@@ -369,3 +369,79 @@
 **Rationale**:
 - Addresses previous feedback about heavy borders/text and lifeless visuals.
 - Improves scan speed and interaction feel while keeping chart performance priorities intact.
+
+---
+
+## 2026-02-18 - UI Declutter and Typography Refresh
+
+**Decision**: Replace the legacy vertical chart tool rail with a compact floating dock that uses section tabs (`tools`, `arrange`, `style`) and persist its state per workspace.
+**Rationale**:
+- Removes always-on dense icon stacks and extra internal scrolling that made the chart area feel cramped.
+- Keeps advanced drawing/style actions available while making default workspace cleaner for replay workflows.
+
+**Decision**: Standardize frontend typography on `Manrope` (UI) and `JetBrains Mono` (numeric/data) and remove hardcoded IBM Plex font usage.
+**Rationale**:
+- Previous font mix felt inconsistent and too technical for non-data text.
+- A simpler two-font system improves readability and visual coherence across rails, tables, and overlays.
+
+**Decision**: Flatten panel/table surfaces (`OrderPanel`, `PositionTable`, `TradeHistory`, `JournalPanel`, `EventLogPanel`) to reduce border-heavy card composition.
+**Rationale**:
+- Excessive boxes and separators reduced scanability and contributed to visual noise.
+- Softer surfaces, rounded grouping, and reduced line density preserve hierarchy without the “boxed-in” look.
+
+---
+
+## 2026-02-18 - TradingView-Inspired Control System (Foldable Groups + Layout Menu)
+
+**Decision**: Replace standalone header toggle buttons with a single `Layout` menu that controls workspace panels and active rail/dock tabs.
+**Rationale**:
+- The old toggle strip was visually noisy and fragmented related actions.
+- A grouped layout control center improves discoverability and reduces toolbar clutter.
+
+**Decision**: Convert replay controls into foldable groups for related settings (`Market`, `Dates`, `Session`).
+**Rationale**:
+- Timeframe/date/session controls are related but infrequent during replay; always-on controls consumed too much horizontal space.
+- Foldable groups keep the topbar compact while preserving fast access when needed.
+
+**Decision**: Remove chart-local dock open/close toggle button and rely on layout-level visibility control.
+**Rationale**:
+- Eliminates duplicate toggle patterns and keeps interaction model consistent.
+- Reduces floating UI chrome inside the chart viewport.
+
+---
+
+## 2026-02-18 - QFChart Adoption + Foldout Interaction Hardening
+
+**Decision**: Replace `lightweight-charts` with `@qfo/qfchart` (`echarts` peer) for trade chart rendering.
+**Rationale**:
+- Aligns chart capabilities with the desired advanced trading UX direction while keeping existing backtest and overlay logic intact.
+- Enables direct data/pixel coordinate conversion needed by existing drawing/risk interaction layers.
+
+**Decision**: Make replay control foldouts (`Market`, `Dates`, `Session`) mutually exclusive and auto-close on outside click / `Escape`.
+**Rationale**:
+- Prevents stacked popovers from creating visual clutter in the topbar.
+- Produces a cleaner, faster control workflow closer to TradingView interaction patterns.
+
+**Decision**: Finalize topbar interaction model around command-style view actions and remove legacy checkbox/toggle patterns.
+**Rationale**:
+- Checkbox/toggle-heavy controls felt noisy and fragmented.
+- Command actions with workspace presets improve discoverability and reduce control clutter.
+
+**Decision**: Flatten shell surfaces and standardize typography/scroll behavior (`IBM Plex Sans` + `IBM Plex Mono`, thin scrollbars, no nested side-rail scroll container).
+**Rationale**:
+- Directly addresses feedback about excessive boxes, poor typography feel, and too many visible scrollbars.
+- Preserves information density while reducing friction and visual noise.
+
+---
+
+## 2026-02-18 - Chart Engine Rollback to Lightweight Charts
+
+**Decision**: Roll back chart engine from `@qfo/qfchart` (`echarts`) to `lightweight-charts`.
+**Rationale**:
+- User preference favored the prior rendering/interaction feel over the QFChart integration.
+- Existing drawing and risk overlays already have stable `lightweight-charts` coordinate logic.
+
+**Decision**: Keep UI declutter and foldout control-system refactors while reverting only the chart engine layer.
+**Rationale**:
+- Preserves improvements to borders/boxes, control grouping, and scrollbar reduction.
+- Limits rollback scope to charting stack and avoids undoing unrelated UX gains.
